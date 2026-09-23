@@ -25,7 +25,8 @@ import {
   syncExpenseToSupabase,
   subscribeToAttendanceLogs,
   fetchAttendanceLogsFromSupabase,
-  ensureCustomerSyncedToSupabase
+  ensureCustomerSyncedToSupabase,
+  fetchCustomersFromSupabase
 } from './lib/supabaseSync';
 import { Navigation } from './components/Navigation';
 import { DashboardView } from './components/DashboardView';
@@ -179,30 +180,39 @@ export function App() {
   useEffect(() => {
     let isMounted = true;
 
-    // Ensure all locally stored customers exist in Supabase customers & subscriptions
+    // Load existing customers from storage immediately
     const existingLocal = loadCustomers();
-    existingLocal.forEach(c => {
-      ensureCustomerSyncedToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
+
+    // Sync from Supabase using official schema structure
+    fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(remoteCusts => {
+      if (isMounted) {
+        setCustomers(prev => {
+          const map = new Map<string, Customer>();
+          // 1. Keep local customers first (so newly added local students are NEVER lost)
+          prev.forEach(c => map.set(c.id, c));
+          existingLocal.forEach(c => {
+            if (!map.has(c.id)) map.set(c.id, c);
+          });
+          // 2. Merge remote customers without deleting local ones
+          if (remoteCusts && remoteCusts.length > 0) {
+            remoteCusts.forEach(c => {
+              if (!map.has(c.id)) {
+                map.set(c.id, c);
+              }
+            });
+          }
+          const merged = Array.from(map.values());
+          saveCustomers(merged);
+          // Sync any local students to Supabase in the background
+          merged.forEach(c => {
+            ensureCustomerSyncedToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
+          });
+          return merged;
+        });
+      }
     });
 
     syncWithSupabase({
-      onCustomersSynced: (remoteCusts) => {
-        if (isMounted && remoteCusts && remoteCusts.length > 0) {
-          setCustomers(prev => {
-            const map = new Map<string, Customer>();
-            remoteCusts.forEach(c => map.set(c.id, c));
-            prev.forEach(c => {
-              if (!map.has(c.id)) {
-                map.set(c.id, c);
-                ensureCustomerSyncedToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
-              }
-            });
-            const merged = Array.from(map.values());
-            saveCustomers(merged);
-            return merged;
-          });
-        }
-      },
       onMealLogsSynced: (m) => {
         if (isMounted) {
           setMealLogs(m);

@@ -37,9 +37,6 @@ const STORAGE_KEYS = {
   CURRENT_USER_ROLE: `${STORAGE_PREFIX}current_user_role`
 };
 
-// Known demo identifiers to permanently purge
-const DEMO_KEYWORDS = ['shena', 'sneha', 'anjali', 'priyanka', 'kavita', 'sakshi', 'pooja', 'ramesh', 'demo'];
-
 export function purgeAllDemoData(): void {
   try {
     // 1. Wipe all legacy v1 and v2 keys from earlier sessions
@@ -62,22 +59,6 @@ export function purgeAllDemoData(): void {
       'morya_v2_expenses'
     ];
     legacyKeys.forEach(k => localStorage.removeItem(k));
-
-    // 2. Check current v3 keys and remove if any demo names are detected
-    const currentCustRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-    if (currentCustRaw) {
-      const parsed = JSON.parse(currentCustRaw);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter(c => {
-          const nameLower = (c?.name || '').toLowerCase();
-          const notesLower = (c?.notes || '').toLowerCase();
-          return !DEMO_KEYWORDS.some(keyword => nameLower.includes(keyword) || notesLower.includes(keyword));
-        });
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cleaned));
-        }
-      }
-    }
   } catch {
     // ignore
   }
@@ -292,19 +273,11 @@ export function generateQrToken(): string {
 }
 
 // Generic LocalStorage helper functions
-// Starts completely EMPTY for all collections
 export function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}${key}`);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (key === 'customers' && Array.isArray(parsed)) {
-        return parsed.filter((c: any) => {
-          const nameLower = (c?.name || '').toLowerCase();
-          const notesLower = (c?.notes || '').toLowerCase();
-          return !DEMO_KEYWORDS.some(k => nameLower.includes(k) || notesLower.includes(k));
-        }) as unknown as T;
-      }
       return parsed;
     }
     return defaultValue;
