@@ -1,0 +1,6 @@
+{
+  "name": "Morya Mess - Digital Mess Management & QR Audit",
+  "description": "Comprehensive mess management system for Morya Mess with digital QR customer cards, anti-fraud attendance scanning, subscription expiry tracking, expenses, worker salaries, and real-time operational auditing.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
