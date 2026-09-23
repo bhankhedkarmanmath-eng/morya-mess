@@ -1,21 +1,27 @@
 {
-  "short_name": "Morya Mess",
+  "id": "/",
   "name": "Morya Mess - Digital Mess Management",
+  "short_name": "Morya Mess",
+  "description": "Comprehensive digital mess and tiffin management app for Morya Mess with QR scanning, meal logs, and subscriptions.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F8F9FC",
+  "theme_color": "#EA580C",
+  "categories": ["food", "business", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
-      "sizes": "192x192"
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
-      "sizes": "512x512"
+      "purpose": "any maskable"
     }
-  ],
-  "start_url": "/",
-  "background_color": "#F8F9FC",
-  "theme_color": "#EA580C",
-  "display": "standalone",
-  "orientation": "portrait"
+  ]
 }
