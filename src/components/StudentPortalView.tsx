@@ -96,6 +96,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const systemCameraInputRef = useRef<HTMLInputElement>(null);
   const animationFrameId = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -150,25 +151,42 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     stopCameraStream();
     setCameraError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Live camera is not enabled by this APK. Use the "Take Photo to Scan" button below!');
+      }
+      
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('muted', 'true');
         await videoRef.current.play();
         setIsCameraActive(true);
         animationFrameId.current = requestAnimationFrame(scanVideoFrame);
+
+        // Check if camera stream is active or returning black frames (common in some Android WebViews)
+        setTimeout(() => {
+          if (videoRef.current && (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0)) {
+            setCameraError('Camera preview is black because this APK restricted camera permissions. Tap "Open Phone Camera" below to scan instantly!');
+          }
+        }, 1500);
       }
     } catch (err: any) {
       console.warn('Camera stream error:', err);
-      setCameraError(err?.message || 'Camera permission required. Please allow camera access or upload QR photo.');
+      setCameraError(err?.message || 'Camera permission not granted in this APK. Tap "Open Phone Camera" below!');
       setIsCameraActive(false);
     }
   };
@@ -358,23 +376,23 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col items-center p-3 sm:p-6 select-none">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 flex flex-col items-center p-2 sm:p-5 select-none">
       {/* Top Header Card */}
-      <header className="w-full max-w-xl bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-orange-600 text-white flex items-center justify-center font-black text-xl shadow-xs">
+      <header className="w-full max-w-full sm:max-w-xl bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-sm p-3.5 sm:p-5 mb-3 sm:mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-orange-600 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-xs shrink-0">
             M
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="font-extrabold text-slate-900 text-base sm:text-lg tracking-tight">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className="font-extrabold text-slate-900 text-sm sm:text-lg tracking-tight">
                 {messName}
               </h1>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
+              <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
                 STUDENT PASS
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
               Near Boys & Girls Hostel, College Road, Latur
             </p>
           </div>
@@ -382,147 +400,175 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={onExitPortal}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 text-slate-700 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 text-slate-700 text-xs font-bold transition-colors cursor-pointer shadow-xs shrink-0"
           title="Sign out of Student Pass"
         >
           <LogOut className="w-3.5 h-3.5 text-slate-500" />
-          <span>Log Out</span>
+          <span className="hidden sm:inline">Log Out</span>
         </button>
       </header>
 
       {/* Student Profile Identity Tag */}
-      <div className="w-full max-w-xl mb-4 bg-white p-3 rounded-2xl border border-slate-200 flex items-center justify-between text-xs shadow-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-500 font-semibold">Active Pass Holder:</span>
-          <span className="font-bold text-slate-900">{customer.name}</span>
+      <div className="w-full max-w-full sm:max-w-xl mb-3 sm:mb-4 bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 flex items-center justify-between text-xs shadow-xs">
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="text-slate-500 font-semibold text-[11px] sm:text-xs">Active Pass:</span>
+          <span className="font-bold text-slate-900 truncate text-[11px] sm:text-xs">{customer.name}</span>
         </div>
-        <span className="px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200 text-xs font-mono font-bold text-orange-800">
+        <span className="px-2 py-0.5 rounded-lg bg-orange-50 border border-orange-200 text-[10px] sm:text-xs font-mono font-bold text-orange-800 shrink-0">
           ID: {customer.id}
         </span>
       </div>
 
       {/* Navigation Sub-Tabs */}
-      <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-1.5 mb-5 flex items-center justify-between text-xs font-bold text-slate-600 shadow-xs overflow-x-auto gap-1">
+      <div className="w-full max-w-full sm:max-w-xl bg-white rounded-2xl border border-slate-200 p-1 mb-4 flex items-center justify-between text-xs font-bold text-slate-600 shadow-xs overflow-x-auto gap-1 no-scrollbar">
         <button
           onClick={() => {
             setScanResult(null);
             setActiveTab('scan_counter');
           }}
-          className={`flex-1 py-2.5 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-1.5 sm:px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap text-[11px] sm:text-xs ${
             activeTab === 'scan_counter'
               ? 'bg-orange-600 text-white shadow-xs'
               : 'hover:text-slate-900 hover:bg-slate-50 text-orange-700 font-extrabold bg-orange-50/60'
           }`}
         >
-          <Camera className="w-4 h-4 text-orange-500 animate-pulse" />
-          <span>Scan Counter QR</span>
+          <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-500 animate-pulse" />
+          <span>Scan Gate QR</span>
         </button>
         <button
           onClick={() => setActiveTab('pass')}
-          className={`flex-1 py-2.5 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-1.5 sm:px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap text-[11px] sm:text-xs ${
             activeTab === 'pass'
               ? 'bg-orange-600 text-white shadow-xs'
               : 'hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <QrCode className="w-4 h-4" />
+          <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Digital Pass</span>
         </button>
         <button
           onClick={() => setActiveTab('leave')}
-          className={`flex-1 py-2.5 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-1.5 sm:px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap text-[11px] sm:text-xs ${
             activeTab === 'leave'
               ? 'bg-orange-600 text-white shadow-xs'
               : 'hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <Calendar className="w-4 h-4" />
+          <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Leave</span>
         </button>
         <button
           onClick={() => setActiveTab('meals')}
-          className={`flex-1 py-2.5 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-1.5 sm:px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap text-[11px] sm:text-xs ${
             activeTab === 'meals'
               ? 'bg-orange-600 text-white shadow-xs'
               : 'hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <Utensils className="w-4 h-4" />
+          <Utensils className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Meals ({customerMeals.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('shift_timing')}
-          className={`flex-1 py-2.5 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-1.5 sm:px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap text-[11px] sm:text-xs ${
             activeTab === 'shift_timing'
               ? 'bg-orange-600 text-white shadow-xs'
               : 'hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <Clock className="w-4 h-4" />
+          <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Hours</span>
         </button>
       </div>
 
       {/* TAB 0: SCAN UNIVERSAL COUNTER QR FOR ATTENDANCE */}
       {activeTab === 'scan_counter' && (
-        <div className="w-full max-w-xl space-y-4">
+        <div className="w-full max-w-full sm:max-w-xl space-y-3.5">
           {/* Shift & Gate Status Pill */}
-          <div className="bg-slate-900 text-white rounded-2xl p-4 flex items-center justify-between shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center">
+          <div className="bg-slate-900 text-white rounded-2xl p-3.5 sm:p-4 flex items-center justify-between shadow-md">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-600 flex items-center justify-center shrink-0">
                 <Camera className="w-5 h-5 text-white" />
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-orange-400 tracking-wider block">
                   Official Dining Counter Standee Scanner
                 </span>
-                <h3 className="font-extrabold text-sm sm:text-base tracking-tight">
+                <h3 className="font-extrabold text-xs sm:text-base tracking-tight">
                   Point Camera at Wall / Standee QR
                 </h3>
               </div>
             </div>
-            <span className="text-[11px] font-mono font-bold bg-slate-800 text-orange-300 px-2.5 py-1 rounded-lg border border-slate-700 uppercase">
+            <span className="text-[10px] sm:text-[11px] font-mono font-bold bg-slate-800 text-orange-300 px-2 py-1 rounded-lg border border-slate-700 uppercase shrink-0">
               {shiftAudit.mealType}
             </span>
           </div>
 
+          {/* Hidden Direct System Camera & Gallery File Inputs */}
+          <input
+            ref={systemCameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+
           {/* Scanner Mode Selector */}
-          <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+          <div className="grid grid-cols-4 rounded-xl bg-slate-200/70 p-1 text-[11px] sm:text-xs font-bold text-slate-700 gap-1">
             <button
               onClick={() => {
                 setScanResult(null);
                 setScanInputMode('camera');
+                startCameraStream();
               }}
-              className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 scanInputMode === 'camera' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900'
               }`}
             >
-              <Camera className="w-3.5 h-3.5" />
-              <span>Camera</span>
+              <Camera className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="truncate">Live Cam</span>
+            </button>
+            <button
+              onClick={() => {
+                systemCameraInputRef.current?.click();
+              }}
+              className="py-1.5 px-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 bg-orange-600 text-white shadow-xs hover:bg-orange-700"
+              title="Opens phone native camera - 100% works in all APKs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-yellow-200 shrink-0" />
+              <span className="truncate font-black">Snap QR</span>
             </button>
             <button
               onClick={() => {
                 setScanResult(null);
                 setScanInputMode('upload');
               }}
-              className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 scanInputMode === 'upload' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900'
               }`}
             >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Upload Photo</span>
+              <Upload className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span className="truncate">Gallery</span>
             </button>
             <button
               onClick={() => {
                 setScanResult(null);
                 setScanInputMode('manual');
               }}
-              className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 scanInputMode === 'manual' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900'
               }`}
             >
-              <QrCode className="w-3.5 h-3.5" />
-              <span>Manual Code</span>
+              <QrCode className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span className="truncate">Manual</span>
             </button>
           </div>
 
@@ -608,12 +654,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
           {/* Active Viewport when NOT verified */}
           {!isVerifying && !scanResult && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {scanInputMode === 'camera' && (
-                <div className="relative bg-black rounded-3xl overflow-hidden border-4 border-slate-900 shadow-2xl flex flex-col items-center justify-center">
+                <div className="relative bg-black rounded-3xl overflow-hidden border-2 sm:border-4 border-slate-900 shadow-2xl flex flex-col items-center justify-center min-h-[300px]">
                   <video
                     ref={videoRef}
-                    className="w-full h-80 object-cover"
+                    className="w-full h-72 sm:h-80 object-cover"
                     playsInline
                     autoPlay
                     muted
@@ -621,8 +667,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   <canvas ref={canvasRef} className="hidden" />
 
                   {/* Camera Aim Target Box */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-6">
-                    <div className="w-56 h-56 border-2 border-orange-400 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-4">
+                    <div className="w-48 h-48 sm:w-56 sm:h-56 border-2 border-orange-400 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
                       {/* Corner marks */}
                       <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg" />
                       <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg" />
@@ -634,29 +680,53 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Camera Footer Banner */}
-                  <div className="absolute bottom-3 left-3 right-3 bg-slate-900/85 backdrop-blur-xs text-white p-2.5 rounded-xl text-center text-xs font-semibold flex items-center justify-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-orange-400 animate-spin" />
-                    <span>Point at Universal Standee QR on Dining Counter</span>
+                  {/* Top 1-Tap Native Camera Helper Button */}
+                  <div className="absolute top-3 inset-x-3 flex justify-center">
+                    <button
+                      onClick={() => systemCameraInputRef.current?.click()}
+                      className="px-3.5 py-1.5 rounded-full bg-orange-600/95 hover:bg-orange-700 text-white text-[11px] font-extrabold shadow-lg backdrop-blur-xs flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer border border-orange-400"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>If screen is black, Tap here to Scan</span>
+                    </button>
                   </div>
 
+                  {/* Camera Footer Banner */}
+                  <div className="absolute bottom-3 left-3 right-3 bg-slate-900/85 backdrop-blur-xs text-white p-2 sm:p-2.5 rounded-xl text-center text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-orange-400 animate-spin shrink-0" />
+                    <span className="truncate">Point at Standee QR or tap button above</span>
+                  </div>
+
+                  {/* Camera Error / Permission Fallback Overlay */}
                   {cameraError && (
-                    <div className="absolute inset-0 bg-slate-900/90 text-white p-6 flex flex-col items-center justify-center text-center space-y-3">
-                      <AlertTriangle className="w-8 h-8 text-amber-400" />
-                      <p className="text-xs text-slate-200">{cameraError}</p>
-                      <div className="flex gap-2">
+                    <div className="absolute inset-0 bg-slate-950/95 text-white p-5 flex flex-col items-center justify-center text-center space-y-3 z-20">
+                      <AlertTriangle className="w-9 h-9 text-amber-400" />
+                      <div>
+                        <h4 className="font-bold text-sm text-white">APK WebView Camera Notice</h4>
+                        <p className="text-[11px] text-slate-300 mt-1 max-w-xs">{cameraError}</p>
+                      </div>
+                      <div className="flex flex-col gap-2 w-full max-w-xs pt-1">
                         <button
-                          onClick={startCameraStream}
-                          className="px-4 py-2 bg-orange-600 text-white text-xs font-bold rounded-xl"
+                          onClick={() => systemCameraInputRef.current?.click()}
+                          className="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          Retry Camera
+                          <Camera className="w-4 h-4" />
+                          <span>📸 Open Phone Camera (100% Works)</span>
                         </button>
-                        <button
-                          onClick={() => setScanInputMode('upload')}
-                          className="px-4 py-2 bg-slate-700 text-white text-xs font-bold rounded-xl"
-                        >
-                          Upload Photo Instead
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={startCameraStream}
+                            className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold rounded-xl"
+                          >
+                            Retry Live Cam
+                          </button>
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold rounded-xl"
+                          >
+                            Gallery Photo
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -664,23 +734,16 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               )}
 
               {scanInputMode === 'upload' && (
-                <div className="bg-white rounded-3xl border-2 border-dashed border-slate-300 p-8 text-center space-y-3">
+                <div className="bg-white rounded-2xl sm:rounded-3xl border-2 border-dashed border-slate-300 p-6 sm:p-8 text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center mx-auto">
                     <Upload className="w-6 h-6" />
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">Upload Photo of Counter Standee QR</h3>
                     <p className="text-xs text-slate-500 mt-1">
-                      Snap a photo of the counter standee with your camera app and upload it here.
+                      Snap a photo with your camera app and select it here.
                     </p>
                   </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-2"
@@ -692,7 +755,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               )}
 
               {scanInputMode === 'manual' && (
-                <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
+                <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-5 sm:p-6 space-y-4">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
                       Enter Standee QR Token Code:
@@ -727,12 +790,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
       {/* TAB 1: OFFICIAL DIGITAL PASS (Show at Mess Entry Gate) */}
       {activeTab === 'pass' && (
-        <div className="w-full max-w-xl space-y-4">
+        <div className="w-full max-w-full sm:max-w-xl space-y-4">
           {/* Main Card Container */}
-          <div className="w-full bg-white rounded-3xl border-4 border-slate-900 shadow-xl overflow-hidden p-2 text-slate-900 relative">
-            <div className="border border-amber-500 rounded-2xl p-4 sm:p-5 bg-white relative">
+          <div className="w-full max-w-full bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-900 shadow-xl overflow-hidden p-1.5 sm:p-2 text-slate-900 relative">
+            <div className="border border-amber-500 rounded-xl sm:rounded-2xl p-3 sm:p-5 bg-white relative overflow-hidden">
               {/* Top Tricolour Ribbon */}
-              <div className="h-1.5 w-full -mt-5 mb-4 flex rounded-t overflow-hidden">
+              <div className="h-1.5 w-full -mt-3.5 sm:-mt-5 mb-3 sm:mb-4 flex rounded-t overflow-hidden">
                 <div className="h-full w-1/3 bg-[#FF9933]"></div>
                 <div className="h-full w-1/3 bg-white"></div>
                 <div className="h-full w-1/3 bg-[#138808]"></div>
@@ -740,9 +803,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
               {/* Pass Header */}
               <div className="flex flex-col items-center pb-3 border-b-2 border-slate-200 mb-3 text-center">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 tracking-wider mb-0.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  <span>MORYA MESS MANAGEMENT</span>
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-amber-800 tracking-wider mb-0.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="truncate">MORYA MESS MANAGEMENT</span>
                 </div>
                 <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 uppercase">
                   {messName}
@@ -751,11 +814,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   OFFICIAL 30-DAY DIGITAL PASS & IDENTITY CARD
                 </p>
 
-                <div className="flex items-center justify-between w-full mt-2.5 pt-2 border-t border-slate-100 text-[11px]">
-                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                <div className="flex items-center justify-between flex-wrap gap-1.5 w-full mt-2.5 pt-2 border-t border-slate-100 text-[11px]">
+                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[180px]">
                     PASS ID: {customer.id}
                   </span>
-                  <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                  <span className={`font-bold px-2 py-0.5 rounded text-[10px] whitespace-nowrap ${
                     customer.gender === 'female' 
                       ? 'bg-orange-100 text-orange-800 border border-orange-200' 
                       : 'bg-blue-100 text-blue-800 border border-blue-200'
@@ -766,12 +829,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Student Details */}
-              <div className="bg-slate-50/90 rounded-2xl p-3.5 border border-slate-200 mb-3.5 space-y-2 text-xs">
+              <div className="bg-slate-50/90 rounded-2xl p-3 sm:p-3.5 border border-slate-200 mb-3.5 space-y-2 text-xs">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                     Student Member Name
                   </span>
-                  <div className="font-black text-slate-900 text-base sm:text-lg tracking-wide">
+                  <div className="font-black text-slate-900 text-base sm:text-lg tracking-wide break-words">
                     {customer.name.toUpperCase()}
                   </div>
                 </div>
@@ -781,15 +844,15 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     <span className="text-slate-400 font-bold block">Mobile:</span>
                     <a 
                       href={`tel:${customer.phone}`}
-                      className="font-bold text-orange-700 hover:underline flex items-center gap-1"
+                      className="font-bold text-orange-700 hover:underline flex items-center gap-1 truncate"
                     >
-                      <Phone className="w-3 h-3 text-emerald-600" />
-                      <span>{customer.phone || 'N/A'}</span>
+                      <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span className="truncate">{customer.phone || 'N/A'}</span>
                     </a>
                   </div>
                   <div>
                     <span className="text-slate-400 font-bold block">Monthly Fee:</span>
-                    <span className="font-black text-emerald-700">₹{standardFee} / 30 Days</span>
+                    <span className="font-black text-emerald-700 whitespace-nowrap">₹{standardFee} / 30 Days</span>
                   </div>
                 </div>
 
@@ -802,11 +865,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Validity Date Box */}
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 mb-3.5 text-center">
+              <div className="p-2.5 sm:p-3 rounded-2xl bg-amber-50 border border-amber-300 mb-3.5 text-center">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block mb-0.5">
                   OFFICIAL 30-DAY VALIDITY PERIOD
                 </span>
-                <div className="font-mono font-black text-sm sm:text-base text-slate-900 flex items-center justify-center gap-2">
+                <div className="font-mono font-black text-xs sm:text-base text-slate-900 flex items-center justify-center flex-wrap gap-1.5 sm:gap-2">
                   <span>{customer.startDate}</span>
                   <span className="text-amber-600 font-sans">➔</span>
                   <span className={isExpired ? 'text-rose-600' : 'text-orange-700'}>{customer.endDate}</span>
@@ -817,23 +880,23 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* QR Code */}
-              <div className="flex flex-col items-center justify-center p-3.5 bg-white rounded-2xl border-2 border-slate-900 mb-3.5">
+              <div className="flex flex-col items-center justify-center p-3 sm:p-3.5 bg-white rounded-2xl border-2 border-slate-900 mb-3.5 max-w-full overflow-hidden">
                 {qrDataUrl ? (
                   <img 
                     src={qrDataUrl} 
                     alt={`Pass QR Code for ${customer.name}`}
-                    className="w-48 h-48 rounded-xl object-contain"
+                    className="w-40 h-40 sm:w-48 sm:h-48 rounded-xl object-contain max-w-full"
                   />
                 ) : (
-                  <div className="w-48 h-48 bg-slate-100 rounded-xl flex items-center justify-center text-xs text-slate-400">
+                  <div className="w-40 h-40 sm:w-48 sm:h-48 bg-slate-100 rounded-xl flex items-center justify-center text-xs text-slate-400">
                     Generating Official QR...
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 mt-2.5 text-[11px] font-bold text-emerald-700">
-                  <ShieldCheck className="w-4 h-4" />
+                <div className="flex items-center gap-1.5 mt-2.5 text-[11px] font-bold text-emerald-700 text-center">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
                   <span>SHOW TO SCANNER AT MESS GATE</span>
                 </div>
-                <span className="text-[9px] font-mono text-slate-400 mt-0.5">
+                <span className="text-[9px] font-mono text-slate-400 mt-0.5 truncate max-w-full text-center">
                   TOKEN: {customer.qrToken ? customer.qrToken.substring(0, 20) + '...' : customer.id}
                 </span>
               </div>
@@ -847,7 +910,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Seals */}
-              <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between text-[9px] text-slate-500">
+              <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-1 text-[9px] text-slate-500">
                 <div>
                   <span className="font-bold text-slate-700 block">SECURITY CERTIFIED PASS</span>
                   <span>Non-transferable • Valid for 30 Days</span>

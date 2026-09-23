@@ -628,7 +628,7 @@ export function App() {
   const pendingLeavesCount = customers.flatMap(c => c.leaves || []).filter(l => !l.approved).length;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased flex flex-col selection:bg-orange-100 selection:text-orange-900">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-slate-900 font-sans antialiased flex flex-col selection:bg-orange-100 selection:text-orange-900">
       {/* Ganpati & Brand Splash Screen */}
       {showSplash && (
         <GanpatiSplash

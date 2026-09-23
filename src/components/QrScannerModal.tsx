@@ -21,7 +21,8 @@ import {
   Zap,
   Lock,
   Moon,
-  Sun
+  Sun,
+  Sparkles
 } from 'lucide-react';
 
 interface QrScannerModalProps {
@@ -62,6 +63,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const systemCameraInputRef = useRef<HTMLInputElement>(null);
   const animationFrameId = useRef<number | null>(null);
   const countdownTimerRef = useRef<any>(null);
 
@@ -441,40 +443,50 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
           </span>
         </div>
 
-        {/* Scan Mode Tabs (Camera vs Upload Gallery vs Manual) */}
+        {/* Scan Mode Tabs (Camera vs Snap vs Upload Gallery vs Manual) */}
         {!scanResult && (
-          <div className="px-5 pt-3 flex border-b border-slate-100 bg-white text-xs font-semibold text-slate-500">
+          <div className="px-3 sm:px-5 pt-3 flex border-b border-slate-100 bg-white text-xs font-semibold text-slate-500 gap-1 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setScanMode('camera')}
-              className={`flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+              className={`flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 scanMode === 'camera'
                   ? 'text-orange-600 border-orange-600 font-bold'
                   : 'border-transparent hover:text-slate-800'
               }`}
             >
               <Camera className="w-4 h-4" />
-              <span>Camera Scan</span>
+              <span>Live Cam</span>
+            </button>
+            <button
+              onClick={() => {
+                systemCameraInputRef.current?.click();
+              }}
+              className="flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 border-transparent text-orange-600 font-bold transition-all cursor-pointer hover:text-orange-700 whitespace-nowrap"
+              title="Opens phone native camera - 100% works in APK"
+            >
+              <Sparkles className="w-4 h-4 text-orange-500" />
+              <span>Snap Photo</span>
             </button>
             <button
               onClick={() => {
                 stopCamera();
                 setScanMode('upload');
               }}
-              className={`flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+              className={`flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 scanMode === 'upload'
                   ? 'text-orange-600 border-orange-600 font-bold'
                   : 'border-transparent hover:text-slate-800'
               }`}
             >
               <Upload className="w-4 h-4" />
-              <span>Gallery / Image</span>
+              <span>Gallery</span>
             </button>
             <button
               onClick={() => {
                 stopCamera();
                 setScanMode('manual');
               }}
-              className={`flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+              className={`flex-1 pb-2.5 flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 scanMode === 'manual'
                   ? 'text-orange-600 border-orange-600 font-bold'
                   : 'border-transparent hover:text-slate-800'
@@ -485,6 +497,16 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
             </button>
           </div>
         )}
+
+        {/* Hidden System Camera Input */}
+        <input
+          ref={systemCameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
 
         {/* Modal Body */}
         <div className="p-5 flex-1 overflow-y-auto space-y-4">
@@ -680,22 +702,31 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                     </div>
 
                     {cameraError && (
-                      <div className="absolute inset-0 bg-slate-900/90 p-5 flex flex-col items-center justify-center text-center text-white space-y-2">
+                      <div className="absolute inset-0 bg-slate-950/95 p-5 flex flex-col items-center justify-center text-center text-white space-y-2 z-20">
                         <AlertCircle className="w-8 h-8 text-amber-400" />
-                        <p className="text-xs font-semibold">{cameraError}</p>
-                        <div className="flex gap-2 pt-2">
+                        <p className="text-xs font-semibold max-w-xs">{cameraError}</p>
+                        <div className="flex flex-col gap-2 pt-2 w-full max-w-xs">
                           <button
-                            onClick={() => setScanMode('upload')}
-                            className="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-bold hover:bg-orange-700 cursor-pointer"
+                            onClick={() => systemCameraInputRef.current?.click()}
+                            className="w-full py-2.5 px-3 rounded-xl bg-orange-600 text-white text-xs font-black hover:bg-orange-700 shadow-md cursor-pointer flex items-center justify-center gap-1.5"
                           >
-                            Upload from Gallery
+                            <Camera className="w-4 h-4" />
+                            <span>📸 Open Phone Camera (100% Works)</span>
                           </button>
-                          <button
-                            onClick={() => setScanMode('manual')}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 cursor-pointer"
-                          >
-                            Manual Search
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setScanMode('upload')}
+                              className="flex-1 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 cursor-pointer"
+                            >
+                              Upload Gallery
+                            </button>
+                            <button
+                              onClick={() => setScanMode('manual')}
+                              className="flex-1 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 cursor-pointer"
+                            >
+                              Manual Search
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
