@@ -5,6 +5,7 @@ import confetti from 'canvas-confetti';
 import { Customer, MealLog, MessShiftAudit } from '../types/mess';
 import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift } from '../lib/storage';
 import { validateAndRecordStudentAttendance } from '../lib/supabaseSync';
+import { fetchMessUpiConfig, recordNewPaymentInSupabase, MessUpiConfig } from '../lib/ownerFeaturesApi';
 import { 
   QrCode, 
   Calendar, 
@@ -33,7 +34,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Zap,
-  Check
+  Check,
+  Copy
 } from 'lucide-react';
 
 interface StudentPortalViewProps {
@@ -77,7 +79,21 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   });
   const [leaveReason, setLeaveReason] = useState('Going to Hometown / Exam Vacation');
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scan_counter' | 'pass' | 'leave' | 'meals' | 'shift_timing'>('scan_counter');
+  const [activeTab, setActiveTab] = useState<'scan_counter' | 'pass' | 'leave' | 'meals' | 'shift_timing' | 'pay_fee'>('scan_counter');
+
+  // Student UPI Payment State
+  const [upiConfig, setUpiConfig] = useState<MessUpiConfig>({
+    upiId: 'moryamess@upi',
+    upiPayeeName: 'Morya Mess Latur',
+    upiQrCodeImage: ''
+  });
+  const [generatedUpiQrUrl, setGeneratedUpiQrUrl] = useState('');
+  const [payAmount, setPayAmount] = useState(customer.balance > 0 ? String(customer.balance) : '2500');
+  const [payUtr, setPayUtr] = useState('');
+  const [payNotes, setPayNotes] = useState('');
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   // Universal Counter Standee Scanner State
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -328,6 +344,52 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch mess official UPI config & generate QR
+  useEffect(() => {
+    fetchMessUpiConfig().then(cfg => {
+      setUpiConfig(cfg);
+      if (cfg.upiId) {
+        const upiUrl = `upi://pay?pa=${encodeURIComponent(cfg.upiId)}&pn=${encodeURIComponent(cfg.upiPayeeName)}&cu=INR`;
+        QRCode.toDataURL(upiUrl, {
+          width: 300,
+          margin: 2,
+          color: { dark: '#0F172A', light: '#FFFFFF' }
+        }).then(url => setGeneratedUpiQrUrl(url)).catch(() => {});
+      }
+    });
+  }, []);
+
+  const handleRecordStudentPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payAmount || Number(payAmount) <= 0) return;
+
+    setIsSubmittingPayment(true);
+    setPaymentSuccessMessage(null);
+
+    const res = await recordNewPaymentInSupabase({
+      customerId: customer.id,
+      amount: Number(payAmount),
+      paymentMode: 'upi',
+      transactionReference: payUtr.trim() || undefined,
+      notes: payNotes.trim() ? `Student App: ${payNotes.trim()}` : 'Payment recorded via Student Portal Pass',
+      status: 'pending' // Student payments await owner verification
+    });
+
+    if (res.success) {
+      setPaymentSuccessMessage(`Payment of ₹${payAmount} submitted! Reference recorded. Status is PENDING verification by Mess Owner.`);
+      setPayUtr('');
+      setPayNotes('');
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+    } else {
+      alert(res.error || 'Failed to record payment');
+    }
+    setIsSubmittingPayment(false);
+  };
+
   // Generate Pass QR Code
   useEffect(() => {
     if (!customer) return;
@@ -478,6 +540,19 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         >
           <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Hours</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('pay_fee')}
+          className={`flex-1 py-2 px-1.5 sm:px-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap text-[11px] sm:text-xs ${
+            activeTab === 'pay_fee'
+              ? 'bg-orange-600 text-white shadow-xs'
+              : customer.balance > 0 
+              ? 'hover:text-rose-700 hover:bg-rose-50 text-rose-600 font-bold bg-rose-50/70 border border-rose-200' 
+              : 'hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <span>Pay Fee {customer.balance > 0 ? `(₹${customer.balance})` : ''}</span>
         </button>
       </div>
 
@@ -1187,6 +1262,185 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 5: OFFICIAL MESS UPI QR & FEE PAYMENT */}
+      {activeTab === 'pay_fee' && (
+        <div className="w-full max-w-xl bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-5">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-slate-900 text-base">Official Mess UPI Payment</h2>
+                <p className="text-xs text-slate-500">Scan official QR, pay with any app & submit UTR</p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+              VERIFIED VPA
+            </span>
+          </div>
+
+          {/* Student Balance Banner */}
+          <div className={`p-4 rounded-2xl border text-xs flex items-center justify-between ${
+            customer.balance > 0 
+              ? 'bg-rose-50 border-rose-200 text-rose-900' 
+              : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+          }`}>
+            <div>
+              <span className="font-bold block text-[11px] opacity-80">Current Subscription Dues</span>
+              <span className="font-black text-lg sm:text-xl">
+                {customer.balance > 0 ? `₹${customer.balance} Pending` : 'All Fees Paid (₹0 Due)'}
+              </span>
+            </div>
+            <span className="px-2.5 py-1 rounded-xl bg-white text-[11px] font-bold shadow-2xs">
+              Plan: {customer.planType === 'both_meals' ? '2 Meals / Day' : '1 Meal / Day'}
+            </span>
+          </div>
+
+          {/* Official QR Code Standee Card */}
+          <div className="bg-slate-900 text-white rounded-2xl p-5 text-center space-y-3 relative overflow-hidden shadow-md">
+            <span className="bg-orange-600 text-white text-[10px] font-black tracking-widest uppercase py-1 px-3 rounded-full inline-block">
+              Scan & Pay via PhonePe / GPay / Paytm
+            </span>
+
+            <div>
+              <h3 className="font-black text-base uppercase text-white tracking-tight">
+                {upiConfig.upiPayeeName || messName}
+              </h3>
+              <p className="text-[11px] text-slate-300 font-medium">Official Mess Payment QR</p>
+            </div>
+
+            {/* QR Image */}
+            <div className="flex justify-center p-2 bg-white rounded-2xl mx-auto w-fit shadow-lg">
+              {upiConfig.upiQrCodeImage ? (
+                <img
+                  src={upiConfig.upiQrCodeImage}
+                  alt="Official Mess UPI QR"
+                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-xl"
+                />
+              ) : generatedUpiQrUrl ? (
+                <img
+                  src={generatedUpiQrUrl}
+                  alt="Official Mess UPI QR"
+                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                />
+              ) : (
+                <div className="w-48 h-48 flex items-center justify-center text-slate-400 text-xs">
+                  Loading QR...
+                </div>
+              )}
+            </div>
+
+            {/* UPI ID / VPA with Copy Button */}
+            <div className="bg-slate-800/90 rounded-xl p-2.5 border border-slate-700 flex items-center justify-between text-xs max-w-sm mx-auto">
+              <div className="text-left truncate mr-2">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Official UPI ID</span>
+                <span className="font-mono font-bold text-orange-400 text-xs sm:text-sm select-all">
+                  {upiConfig.upiId}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (upiConfig.upiId) {
+                    navigator.clipboard.writeText(upiConfig.upiId);
+                    setCopiedUpi(true);
+                    setTimeout(() => setCopiedUpi(false), 2000);
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-bold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+              >
+                {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedUpi ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Success Banner */}
+          {paymentSuccessMessage && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
+              <div className="font-black text-sm flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Payment Record Submitted to Owner!</span>
+              </div>
+              <p className="text-[11px] opacity-90">{paymentSuccessMessage}</p>
+            </div>
+          )}
+
+          {/* Payment Record / UTR Entry Form */}
+          <form onSubmit={handleRecordStudentPayment} className="space-y-4 pt-2">
+            <div className="border-t border-slate-100 pt-3">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-slate-800 mb-1">
+                Record Your Payment for Owner Verification
+              </h3>
+              <p className="text-[11px] text-slate-500 mb-3">
+                After paying via your UPI App, enter the amount and 12-digit UTR/Reference number from your receipt.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Amount Paid (₹) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={payAmount}
+                  onChange={e => setPayAmount(e.target.value)}
+                  placeholder="e.g. 2500"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 font-bold text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  12-Digit UPI Ref / UTR No. *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={payUtr}
+                  onChange={e => setPayUtr(e.target.value)}
+                  placeholder="e.g. 425619382019"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-800 mb-1 text-xs">
+                Optional Note / Payment Remarks
+              </label>
+              <input
+                type="text"
+                value={payNotes}
+                onChange={e => setPayNotes(e.target.value)}
+                placeholder="e.g. Paid for next month / Google Pay"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-slate-50 text-xs text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmittingPayment}
+              className="w-full py-3 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSubmittingPayment ? (
+                <span>Submitting to Owner Desk...</span>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>Submit Payment Verification Request</span>
+                </>
+              )}
+            </button>
+          </form>
         </div>
       )}
     </div>

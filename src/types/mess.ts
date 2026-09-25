@@ -327,6 +327,10 @@ export interface BusinessRulesConfig {
   contactPhone: string;
   address: string;
   currency: string;
+  // Official UPI & Mess Payment QR Settings
+  upiId?: string;
+  upiPayeeName?: string;
+  upiQrCodeImage?: string;
   // Business status
   messStatus: 'open' | 'closed' | 'holiday';
   messClosureReason: string;
@@ -373,3 +377,147 @@ export interface MessShiftAudit {
   reason: string;
   isSundayNightClosed: boolean;
 }
+
+// ==========================================
+// FEATURE 1: Professional Notification Center
+// ==========================================
+export type OwnerNotificationType =
+  | 'new_customer'
+  | 'new_trial'
+  | 'payment_received'
+  | 'cash_payment'
+  | 'upi_payment'
+  | 'payment_verification'
+  | 'outstanding_fee'
+  | 'sub_expiring_soon'
+  | 'sub_expired'
+  | 'complaint_received'
+  | 'complaint_updated'
+  | 'meal_rating'
+  | 'poll_response'
+  | 'leave_request'
+  | 'skip_meal'
+  | 'system_security'
+  | 'staff_activity';
+
+export interface OwnerNotification {
+  id: string;
+  messId: string;
+  type: OwnerNotificationType;
+  title: string;
+  message: string;
+  customerId?: string;
+  customerName?: string;
+  relatedRecordId?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  isRead: boolean;
+  createdAt: string;
+  actionUrl?: string;
+}
+
+// ==========================================
+// FEATURE 4: Financial Transactions & Payments
+// ==========================================
+export type PaymentMode = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'adjustment';
+export type PaymentStatus = 'pending' | 'verified' | 'reversed' | 'failed';
+
+export interface SupabasePaymentRecord {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  messId: string;
+  amount: number;
+  paymentMode: PaymentMode;
+  transactionReference?: string; // UTR or receipt #
+  status: PaymentStatus;
+  notes?: string;
+  recordedBy: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  reversalReason?: string;
+  isReversal?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ==========================================
+// FEATURE 6: Trial Student Management
+// ==========================================
+export type TrialStatus = 'ACTIVE' | 'ENDING_SOON' | 'EXPIRED' | 'CONVERTED' | 'CANCELLED';
+
+export interface TrialStudent {
+  id: string;
+  messId: string;
+  fullName: string;
+  phone: string;
+  email?: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  mealType: 'both' | 'lunch_only' | 'dinner_only';
+  mealLimit: number; // default e.g. 2 or 4
+  mealsUsed: number;
+  notes?: string;
+  status: TrialStatus;
+  convertedCustomerId?: string;
+  convertedAt?: string;
+  createdAt: string;
+}
+
+// ==========================================
+// FEATURE 2: Drawer Navigation Target Pages
+// ==========================================
+export type OwnerNavPage =
+  // Dashboard
+  | 'dashboard'
+  // Customers / Diners
+  | 'customers'
+  | 'add_customer'
+  | 'search_customer'
+  | 'trial_students'
+  | 'subscriptions'
+  | 'skip_meal'
+  | 'mark_attendance'
+  | 'attendance_scanner'
+  // Reports & Analytics
+  | 'attendance_reports'
+  | 'customer_reports'
+  | 'payment_reports'
+  | 'expense_reports'
+  | 'monthly_statements'
+  | 'business_summary'
+  | 'excel_export'
+  // Billing & Payments
+  | 'billing_payments'
+  | 'upi_payments'
+  | 'cash_payments'
+  | 'qr_settings'
+  | 'payment_history'
+  | 'pending_payments'
+  | 'payment_verification'
+  | 'customer_ledger'
+  | 'statement_calc'
+  // Finance & Walk-in POS
+  | 'walkin_pos'
+  | 'walkin_meal_types'
+  | 'walkin_payments'
+  | 'expense_tracker'
+  // Menu & Engagement
+  | 'meal_plans_pricing'
+  | 'meal_rate_timing'
+  | 'weekly_menu'
+  | 'polls'
+  | 'reminders'
+  | 'meal_ratings'
+  | 'complaints_tracker'
+  // Mess Administration
+  | 'mess_settings'
+  | 'staff_management'
+  | 'roles_permissions'
+  | 'my_mess'
+  | 'security_log'
+  // My Account & Support
+  | 'my_account'
+  | 'help_support'
+  | 'support_requests';
+

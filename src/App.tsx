@@ -50,6 +50,20 @@ import { GanpatiSplash } from './components/GanpatiSplash';
 import { PortalSelectionScreen } from './components/PortalSelectionScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { SetNewPasswordScreen } from './components/SetNewPasswordScreen';
+
+// The 6 High-Priority Owner App Features
+import { OwnerNotification, OwnerNavPage } from './types/mess';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { OwnerDrawerMenu } from './components/OwnerDrawerMenu';
+import { PaymentsManagerView } from './components/PaymentsManagerView';
+import { MonthlyStatementGenerator } from './components/MonthlyStatementGenerator';
+import { TrialStudentsManagerView } from './components/TrialStudentsManagerView';
+import { 
+  fetchOwnerNotifications, 
+  markNotificationAsRead, 
+  markAllNotificationsAsRead,
+  subscribeToOwnerNotificationsRealtime 
+} from './lib/ownerFeaturesApi';
 import { 
   AuthState, 
   AuthPortal, 
@@ -85,6 +99,14 @@ export function App() {
   const [currentPortal, setCurrentPortal] = useState<'owner' | 'student'>('owner');
   const [studentPortalCustomer, setStudentPortalCustomer] = useState<Customer | null>(null);
 
+  // Features 1 to 6 states
+  const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
+  const [notifications, setNotifications] = useState<OwnerNotification[]>([]);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
+  const [activeOwnerPage, setActiveOwnerPage] = useState<OwnerNavPage>('dashboard');
+  const [selectedStatementCustomer, setSelectedStatementCustomer] = useState<Customer | null>(null);
+
   // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isUniversalQrOpen, setIsUniversalQrOpen] = useState(false);
@@ -98,6 +120,79 @@ export function App() {
   const [selectedRenewCustomer, setSelectedRenewCustomer] = useState<Customer | null>(null);
   const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<Customer | null>(null);
   const [selectedPenaltyCustomer, setSelectedPenaltyCustomer] = useState<Customer | null>(null);
+
+  // Load Notifications & Supabase Realtime
+  useEffect(() => {
+    loadOwnerNotifications();
+    const unsub = subscribeToOwnerNotificationsRealtime((newNotification) => {
+      setNotifications(prev => [newNotification, ...prev.filter(n => n.id !== newNotification.id)]);
+    });
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  const loadOwnerNotifications = async () => {
+    setIsNotificationsLoading(true);
+    const data = await fetchOwnerNotifications();
+    setNotifications(data);
+    setIsNotificationsLoading(false);
+  };
+
+  const handleMarkNotificationRead = async (id: string) => {
+    await markNotificationAsRead(id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    await markAllNotificationsAsRead();
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  };
+
+  const handleSelectDrawerPage = (page: OwnerNavPage) => {
+    setActiveOwnerPage(page);
+    switch (page) {
+      case 'dashboard':
+        setCurrentTab('dashboard');
+        break;
+      case 'customers':
+      case 'search_customer':
+        setCurrentTab('customers');
+        break;
+      case 'add_customer':
+        setIsAddCustomerOpen(true);
+        break;
+      case 'trial_students':
+        // Sub-page handled in activeOwnerPage
+        break;
+      case 'mark_attendance':
+      case 'attendance_scanner':
+        setIsScannerOpen(true);
+        break;
+      case 'attendance_reports':
+      case 'customer_reports':
+      case 'payment_reports':
+      case 'expense_reports':
+      case 'business_summary':
+      case 'excel_export':
+        setCurrentTab('reports');
+        break;
+      case 'expense_tracker':
+        setCurrentTab('expenses');
+        break;
+      case 'staff_management':
+        setCurrentTab('workers');
+        break;
+      case 'mess_settings':
+      case 'meal_plans_pricing':
+      case 'meal_rate_timing':
+      case 'roles_permissions':
+        setIsSettingsOpen(true);
+        break;
+      default:
+        break;
+    }
+  };
 
   // Check existing session on mount
   useEffect(() => {
@@ -735,10 +830,13 @@ export function App() {
           <>
             {/* OWNER / MANAGER APP VIEW */}
             <div className="flex-1 flex flex-col">
-            {/* Top Sticky Header */}
+            {/* Top Sticky Header with Hamburger & Notification Bell */}
             <Navigation
               currentTab={currentTab}
-              onTabChange={setCurrentTab}
+              onTabChange={(tab) => {
+                setCurrentTab(tab);
+                setActiveOwnerPage(tab as any);
+              }}
               currentRole={currentRole}
               onRoleChange={setCurrentRole}
               onOpenScanner={() => setIsScannerOpen(true)}
@@ -748,6 +846,9 @@ export function App() {
               pendingLeavesCount={pendingLeavesCount}
               onLogout={handleLogout}
               userEmail={authenticatedUser?.identifier}
+              onOpenDrawer={() => setIsOwnerDrawerOpen(true)}
+              onOpenNotifications={() => setIsNotificationCenterOpen(true)}
+              unreadNotificationsCount={notifications.filter(n => !n.isRead).length}
               onSwitchPortal={() => {
                 if (customers.length > 0) {
                   setStudentPortalCustomer(customers[0]);
@@ -760,7 +861,43 @@ export function App() {
 
           {/* Main Content Body */}
           <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-            {currentTab === 'dashboard' && (
+            {/* Direct Sub-Views from 3-Line Menu */}
+            {activeOwnerPage === 'trial_students' ? (
+              <TrialStudentsManagerView
+                onRefreshAllData={() => {
+                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+                    if (res && res.length > 0) {
+                      setCustomers(res);
+                      saveCustomers(res);
+                    }
+                  });
+                }}
+              />
+            ) : ['billing_payments', 'upi_payments', 'cash_payments', 'qr_settings', 'pending_payments', 'payment_verification', 'customer_ledger', 'payment_history'].includes(activeOwnerPage) ? (
+              <PaymentsManagerView
+                customers={customers}
+                initialSubTab={
+                  activeOwnerPage === 'qr_settings' ? 'qr_config' :
+                  activeOwnerPage === 'upi_payments' ? 'upi' :
+                  activeOwnerPage === 'cash_payments' ? 'cash' :
+                  activeOwnerPage === 'pending_payments' || activeOwnerPage === 'payment_verification' ? 'pending' : 'all'
+                }
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+                onRefreshCustomers={() => {
+                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+                    if (res && res.length > 0) {
+                      setCustomers(res);
+                      saveCustomers(res);
+                    }
+                  });
+                }}
+              />
+            ) : ['monthly_statements', 'statement_calc'].includes(activeOwnerPage) ? (
+              <MonthlyStatementGenerator
+                customers={customers}
+                selectedCustomer={selectedStatementCustomer}
+              />
+            ) : currentTab === 'dashboard' ? (
               <DashboardView
                 customers={customers}
                 mealLogs={mealLogs}
@@ -786,9 +923,7 @@ export function App() {
                   setCurrentTab('reports');
                 }}
               />
-            )}
-
-            {currentTab === 'customers' && (
+            ) : currentTab === 'customers' ? (
               <CustomersListView
                 customers={customers}
                 onOpenAddModal={() => setIsAddCustomerOpen(true)}
@@ -802,24 +937,18 @@ export function App() {
                 onDeleteCustomer={handleDeleteCustomer}
                 onClearAllCustomers={handleClearAllCustomers}
               />
-            )}
-
-            {currentTab === 'meals' && (
+            ) : currentTab === 'meals' ? (
               <MealLogsView
                 mealLogs={mealLogs}
                 onOpenScanner={() => setIsScannerOpen(true)}
               />
-            )}
-
-            {currentTab === 'expenses' && (
+            ) : currentTab === 'expenses' ? (
               <ExpensesView
                 expenses={expenses}
                 onAddExpense={handleAddExpense}
                 onDeleteExpense={handleDeleteExpense}
               />
-            )}
-
-            {currentTab === 'workers' && (
+            ) : currentTab === 'workers' ? (
               <WorkersAndKitchenView
                 workers={workers}
                 cleanings={cleanings}
@@ -828,9 +957,7 @@ export function App() {
                 onDeleteWorker={handleDeleteWorker}
                 onAddCleaning={handleAddCleaning}
               />
-            )}
-
-            {currentTab === 'reports' && (
+            ) : (
               <AuditAndReportsView
                 customers={customers}
                 expenses={expenses}
@@ -901,8 +1028,6 @@ export function App() {
         customer={selected360Customer}
         isOpen={!!selected360Customer}
         onClose={() => setSelected360Customer(null)}
-        mealLogs={mealLogs}
-        rules={rules}
         onOpenPrintPass={(c: Customer) => {
           setSelected360Customer(null);
           setSelectedPrintCustomer(c);
@@ -915,16 +1040,18 @@ export function App() {
           setSelected360Customer(null);
           setSelectedPaymentCustomer(c);
         }}
-        onOpenPenalty={(c: Customer) => {
+        onOpenStatement={(c: Customer) => {
           setSelected360Customer(null);
-          setSelectedPenaltyCustomer(c);
+          setSelectedStatementCustomer(c);
+          setActiveOwnerPage('monthly_statements');
         }}
-        onUpdateCustomer={(updated) => {
-          const newCustomers = customers.map(c => c.id === updated.id ? updated : c);
-          setCustomers(newCustomers);
-          saveCustomers(newCustomers);
-          syncCustomerToSupabase(updated);
-          setSelected360Customer(updated);
+        onCustomerUpdated={() => {
+          fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+            if (res && res.length > 0) {
+              setCustomers(res);
+              saveCustomers(res);
+            }
+          });
         }}
       />
 
@@ -1011,6 +1138,33 @@ export function App() {
             }
           });
         }}
+      />
+
+      {/* 11. FEATURE 1: Professional Notification Center Modal */}
+      <NotificationCenterModal
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setIsNotificationCenterOpen(false)}
+        notifications={notifications}
+        onMarkAsRead={handleMarkNotificationRead}
+        onMarkAllAsRead={handleMarkAllNotificationsRead}
+        onRefresh={loadOwnerNotifications}
+        isLoading={isNotificationsLoading}
+        onSelectRecord={(_type, customerId) => {
+          if (customerId) {
+            const matched = customers.find(c => c.id === customerId);
+            if (matched) setSelected360Customer(matched);
+          }
+        }}
+      />
+
+      {/* 12. FEATURE 2: Professional Three-Line Collapsible Owner Drawer Menu */}
+      <OwnerDrawerMenu
+        isOpen={isOwnerDrawerOpen}
+        onClose={() => setIsOwnerDrawerOpen(false)}
+        activePage={activeOwnerPage}
+        onSelectPage={handleSelectDrawerPage}
+        messName={rules.messName}
+        onLogout={handleLogout}
       />
           </>
         )
