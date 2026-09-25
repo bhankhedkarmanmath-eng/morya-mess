@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Expense, ExpenseCategory } from '../types/mess';
 import { getTodayString } from '../lib/storage';
+import { exportToSpreadsheet } from '../lib/exportUtils';
 import { 
   Receipt, 
   Plus, 
@@ -68,7 +69,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
   const filteredExpenses = expenses.filter(e => {
     const matchesSearch = 
-      e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (e.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       e.paidTo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (e.billNumber && e.billNumber.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCat = selectedCategory === 'ALL' || e.category === selectedCategory;
@@ -102,29 +103,27 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   };
 
   const exportExpensesToCsv = () => {
-    if (expenses.length === 0) {
-      alert('No expense records to export.');
+    if (filteredExpenses.length === 0) {
+      alert('No data available for the selected filters.');
       return;
     }
-    const headers = ['Date', 'Title', 'Category', 'Amount (INR)', 'Paid To', 'Payment Mode', 'Bill Number', 'Notes'];
-    const rows = expenses.map(e => [
-      e.date,
-      `"${e.title.replace(/"/g, '""')}"`,
-      `"${(CATEGORY_CONFIG[e.category]?.label || e.category).replace(/"/g, '""')}"`,
-      e.amount,
-      `"${e.paidTo.replace(/"/g, '""')}"`,
-      e.paymentMode,
-      `"${(e.billNumber || '').replace(/"/g, '""')}"`,
-      `"${(e.notes || '').replace(/"/g, '""')}"`
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `morya_mess_expenses_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const data = filteredExpenses.map(e => ({
+      'Date': e.date,
+      'Title / Description': e.title || e.paidTo || 'Expense',
+      'Category': (CATEGORY_CONFIG[e.category]?.label || e.category).toUpperCase(),
+      'Amount (INR)': Number(e.amount),
+      'Paid To / Vendor': e.paidTo,
+      'Payment Mode': e.paymentMode.toUpperCase(),
+      'Bill / Voucher Number': e.billNumber || '',
+      'Notes': e.notes || ''
+    }));
+
+    exportToSpreadsheet(data, {
+      filename: `Morya_Mess_Expenses_${new Date().toISOString().split('T')[0]}`,
+      sheetName: 'Expenses_Ledger',
+      format: 'xlsx'
+    });
   };
 
   return (

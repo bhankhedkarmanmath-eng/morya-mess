@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Customer, MealLog, Expense, Worker, CleaningInspection, BusinessRulesConfig, UserRole, TrialVisitor, ScanEligibility, MealType } from './types/mess';
 import { 
   loadCustomers, 
@@ -52,17 +52,48 @@ import { LoginScreen } from './components/LoginScreen';
 import { SetNewPasswordScreen } from './components/SetNewPasswordScreen';
 
 // The 6 High-Priority Owner App Features
-import { OwnerNotification, OwnerNavPage } from './types/mess';
+import { OwnerNotification, OwnerNavPage, SupabasePaymentRecord } from './types/mess';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { OwnerDrawerMenu } from './components/OwnerDrawerMenu';
 import { PaymentsManagerView } from './components/PaymentsManagerView';
 import { MonthlyStatementGenerator } from './components/MonthlyStatementGenerator';
 import { TrialStudentsManagerView } from './components/TrialStudentsManagerView';
+
+// Dedicated Views for Owner App Modules
+import { AttendanceScannerScreen } from './components/views/AttendanceScannerScreen';
+import { BillingOverviewView } from './components/views/BillingOverviewView';
+import { CashPaymentsView } from './components/views/CashPaymentsView';
+import { ComplaintsTrackerView } from './components/views/ComplaintsTrackerView';
+import { CustomerLedgerView } from './components/views/CustomerLedgerView';
+import { ExpenseTrackerView } from './components/views/ExpenseTrackerView';
+import { LeavesManagerView } from './components/views/LeavesManagerView';
+import { MarkAttendanceView } from './components/views/MarkAttendanceView';
+import { MealPlansPricingView } from './components/views/MealPlansPricingView';
+import { MealRateTimingView } from './components/views/MealRateTimingView';
+import { MealRatingsView } from './components/views/MealRatingsView';
+import { MessSettingsView } from './components/views/MessSettingsView';
+import { MonthlyStatementCalculatorView } from './components/views/MonthlyStatementCalculatorView';
+import { MyMessProfileView } from './components/views/MyMessProfileView';
+import { PaymentHistoryView } from './components/views/PaymentHistoryView';
+import { PaymentVerificationView } from './components/views/PaymentVerificationView';
+import { PendingPaymentsView } from './components/views/PendingPaymentsView';
+import { PollsManagerView } from './components/views/PollsManagerView';
+import { RemindersNoticesView } from './components/views/RemindersNoticesView';
+import { RolesPermissionsView } from './components/views/RolesPermissionsView';
+import { SearchCustomerView } from './components/views/SearchCustomerView';
+import { StaffManagementView } from './components/views/StaffManagementView';
+import { SubscriptionsView } from './components/views/SubscriptionsView';
+import { UPIPaymentsView } from './components/views/UPIPaymentsView';
+import { WalkinMealTypesView } from './components/views/WalkinMealTypesView';
+import { WalkinPOSView } from './components/views/WalkinPOSView';
+import { WalkinPaymentsView } from './components/views/WalkinPaymentsView';
+import { WeeklyMenuEditorView } from './components/views/WeeklyMenuEditorView';
 import { 
   fetchOwnerNotifications, 
   markNotificationAsRead, 
   markAllNotificationsAsRead,
-  subscribeToOwnerNotificationsRealtime 
+  subscribeToOwnerNotificationsRealtime,
+  fetchPaymentsFromSupabase
 } from './lib/ownerFeaturesApi';
 import { 
   AuthState, 
@@ -93,11 +124,12 @@ export function App() {
   const [trials, setTrials] = useState<TrialVisitor[]>(() => loadTrials());
 
   // UI state
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'customers' | 'meals' | 'expenses' | 'workers' | 'reports'>('dashboard');
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports'>('dashboard');
   const [reportsInitialTab, setReportsInitialTab] = useState<'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals'>('pnl');
   const [currentRole, setCurrentRole] = useState<UserRole>('owner');
   const [currentPortal, setCurrentPortal] = useState<'owner' | 'student'>('owner');
   const [studentPortalCustomer, setStudentPortalCustomer] = useState<Customer | null>(null);
+  const [pendingPaymentsCount, setPendingPaymentsCount] = useState<number>(0);
 
   // Features 1 to 6 states
   const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
@@ -121,16 +153,40 @@ export function App() {
   const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<Customer | null>(null);
   const [selectedPenaltyCustomer, setSelectedPenaltyCustomer] = useState<Customer | null>(null);
 
+  // Check pending payments for navigation badge
+  const checkPendingPayments = useCallback(async () => {
+    try {
+      const all = await fetchPaymentsFromSupabase();
+      const count = all.filter((p: SupabasePaymentRecord) => p.status === 'pending').length;
+      setPendingPaymentsCount(count);
+    } catch {}
+  }, []);
+
   // Load Notifications & Supabase Realtime
   useEffect(() => {
     loadOwnerNotifications();
+    checkPendingPayments();
+
+    const handlePaymentEvent = () => {
+      checkPendingPayments();
+      loadOwnerNotifications();
+    };
+
+    window.addEventListener('morya_payment_created', handlePaymentEvent);
+    window.addEventListener('morya_payment_updated', handlePaymentEvent);
+    window.addEventListener('morya_notification_created', () => loadOwnerNotifications());
+
     const unsub = subscribeToOwnerNotificationsRealtime((newNotification) => {
       setNotifications(prev => [newNotification, ...prev.filter(n => n.id !== newNotification.id)]);
+      checkPendingPayments();
     });
+
     return () => {
       unsub();
+      window.removeEventListener('morya_payment_created', handlePaymentEvent);
+      window.removeEventListener('morya_payment_updated', handlePaymentEvent);
     };
-  }, []);
+  }, [checkPendingPayments]);
 
   const loadOwnerNotifications = async () => {
     setIsNotificationsLoading(true);
@@ -151,46 +207,10 @@ export function App() {
 
   const handleSelectDrawerPage = (page: OwnerNavPage) => {
     setActiveOwnerPage(page);
-    switch (page) {
-      case 'dashboard':
-        setCurrentTab('dashboard');
-        break;
-      case 'customers':
-      case 'search_customer':
-        setCurrentTab('customers');
-        break;
-      case 'add_customer':
-        setIsAddCustomerOpen(true);
-        break;
-      case 'trial_students':
-        // Sub-page handled in activeOwnerPage
-        break;
-      case 'mark_attendance':
-      case 'attendance_scanner':
-        setIsScannerOpen(true);
-        break;
-      case 'attendance_reports':
-      case 'customer_reports':
-      case 'payment_reports':
-      case 'expense_reports':
-      case 'business_summary':
-      case 'excel_export':
-        setCurrentTab('reports');
-        break;
-      case 'expense_tracker':
-        setCurrentTab('expenses');
-        break;
-      case 'staff_management':
-        setCurrentTab('workers');
-        break;
-      case 'mess_settings':
-      case 'meal_plans_pricing':
-      case 'meal_rate_timing':
-      case 'roles_permissions':
-        setIsSettingsOpen(true);
-        break;
-      default:
-        break;
+    setIsOwnerDrawerOpen(false);
+    if (page === 'add_customer') {
+      setIsAddCustomerOpen(true);
+      setActiveOwnerPage('customers');
     }
   };
 
@@ -835,15 +855,22 @@ export function App() {
               currentTab={currentTab}
               onTabChange={(tab) => {
                 setCurrentTab(tab);
-                setActiveOwnerPage(tab as any);
+                if (tab === 'dashboard') setActiveOwnerPage('dashboard');
+                else if (tab === 'customers') setActiveOwnerPage('customers');
+                else if (tab === 'meals') setActiveOwnerPage('meals' as any);
+                else if (tab === 'payments') setActiveOwnerPage('billing_payments');
+                else if (tab === 'expenses') setActiveOwnerPage('expense_tracker');
+                else if (tab === 'workers') setActiveOwnerPage('staff_management');
+                else if (tab === 'reports') setActiveOwnerPage('business_summary');
               }}
               currentRole={currentRole}
               onRoleChange={setCurrentRole}
-              onOpenScanner={() => setIsScannerOpen(true)}
+              onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
               onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => setActiveOwnerPage('mess_settings')}
               messName={rules.messName}
               pendingLeavesCount={pendingLeavesCount}
+              pendingPaymentsCount={pendingPaymentsCount}
               onLogout={handleLogout}
               userEmail={authenticatedUser?.identifier}
               onOpenDrawer={() => setIsOwnerDrawerOpen(true)}
@@ -861,7 +888,7 @@ export function App() {
 
           {/* Main Content Body */}
           <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-            {/* Direct Sub-Views from 3-Line Menu */}
+            {/* Direct Sub-Views from 3-Line Menu & Navigation */}
             {activeOwnerPage === 'trial_students' ? (
               <TrialStudentsManagerView
                 onRefreshAllData={() => {
@@ -873,15 +900,86 @@ export function App() {
                   });
                 }}
               />
-            ) : ['billing_payments', 'upi_payments', 'cash_payments', 'qr_settings', 'pending_payments', 'payment_verification', 'customer_ledger', 'payment_history'].includes(activeOwnerPage) ? (
+            ) : activeOwnerPage === 'search_customer' ? (
+              <SearchCustomerView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('customers')}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+              />
+            ) : activeOwnerPage === 'subscriptions' ? (
+              <SubscriptionsView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('customers')}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+              />
+            ) : activeOwnerPage === 'skip_meal' ? (
+              <LeavesManagerView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onApproveLeave={handleApproveLeave}
+                onRejectLeave={handleRejectLeave}
+                onCreateTestLeave={handleCreateTestLeave}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+              />
+            ) : activeOwnerPage === 'mark_attendance' ? (
+              <MarkAttendanceView
+                customers={customers}
+                mealLogs={mealLogs}
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onRecordMeal={(cid, shift) => {
+                  handleRecordMeal(cid, 'ALLOW', 'Marked at Counter', shift || 'lunch');
+                  return { success: true, message: 'Attendance Marked Successfully' };
+                }}
+                onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
+              />
+            ) : activeOwnerPage === 'attendance_scanner' ? (
+              <AttendanceScannerScreen
+                customers={customers}
+                mealLogs={mealLogs}
+                rules={rules}
+                userRole={currentRole}
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onRecordMeal={(cid, shift) => {
+                  handleRecordMeal(cid, 'ALLOW', 'Scan Approved', shift || 'lunch');
+                  return { success: true, message: 'Scan Approved' };
+                }}
+                onOpenPayment={(c) => setSelectedPaymentCustomer(c)}
+              />
+            ) : activeOwnerPage === 'billing_payments' ? (
+              <BillingOverviewView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onNavigateSubModule={(mod) => setActiveOwnerPage(mod as OwnerNavPage)}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+              />
+            ) : activeOwnerPage === 'upi_payments' ? (
+              <UPIPaymentsView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+              />
+            ) : activeOwnerPage === 'cash_payments' ? (
+              <CashPaymentsView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+                onRefreshCustomers={() => {
+                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+                    if (res && res.length > 0) {
+                      setCustomers(res);
+                      saveCustomers(res);
+                    }
+                  });
+                }}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+              />
+            ) : activeOwnerPage === 'qr_settings' ? (
               <PaymentsManagerView
                 customers={customers}
-                initialSubTab={
-                  activeOwnerPage === 'qr_settings' ? 'qr_config' :
-                  activeOwnerPage === 'upi_payments' ? 'upi' :
-                  activeOwnerPage === 'cash_payments' ? 'cash' :
-                  activeOwnerPage === 'pending_payments' || activeOwnerPage === 'payment_verification' ? 'pending' : 'all'
-                }
+                initialSubTab="qr_config"
                 onOpenCustomer360={(c) => setSelected360Customer(c)}
                 onRefreshCustomers={() => {
                   fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
@@ -892,38 +990,157 @@ export function App() {
                   });
                 }}
               />
-            ) : ['monthly_statements', 'statement_calc'].includes(activeOwnerPage) ? (
+            ) : activeOwnerPage === 'payment_history' ? (
+              <PaymentHistoryView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+                onRefreshCustomers={() => {
+                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+                    if (res && res.length > 0) {
+                      setCustomers(res);
+                      saveCustomers(res);
+                    }
+                  });
+                }}
+              />
+            ) : activeOwnerPage === 'pending_payments' ? (
+              <PendingPaymentsView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+                onRefreshCustomers={() => {
+                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+                    if (res && res.length > 0) {
+                      setCustomers(res);
+                      saveCustomers(res);
+                    }
+                  });
+                }}
+              />
+            ) : activeOwnerPage === 'payment_verification' ? (
+              <PaymentVerificationView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+                onRefreshCustomers={() => {
+                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
+                    if (res && res.length > 0) {
+                      setCustomers(res);
+                      saveCustomers(res);
+                    }
+                  });
+                }}
+              />
+            ) : activeOwnerPage === 'customer_ledger' ? (
+              <CustomerLedgerView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+              />
+            ) : activeOwnerPage === 'statement_calc' ? (
+              <MonthlyStatementCalculatorView
+                customers={customers}
+                onBack={() => setActiveOwnerPage('billing_payments')}
+              />
+            ) : activeOwnerPage === 'monthly_statements' ? (
               <MonthlyStatementGenerator
                 customers={customers}
                 selectedCustomer={selectedStatementCustomer}
               />
-            ) : currentTab === 'dashboard' ? (
-              <DashboardView
-                customers={customers}
-                mealLogs={mealLogs}
+            ) : activeOwnerPage === 'walkin_pos' ? (
+              <WalkinPOSView
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onNavigateMealTypes={() => setActiveOwnerPage('walkin_meal_types')}
+                onNavigateHistory={() => setActiveOwnerPage('walkin_payments')}
+              />
+            ) : activeOwnerPage === 'walkin_meal_types' ? (
+              <WalkinMealTypesView
+                onBack={() => setActiveOwnerPage('walkin_pos')}
+                onNavigatePOS={() => setActiveOwnerPage('walkin_pos')}
+              />
+            ) : activeOwnerPage === 'walkin_payments' ? (
+              <WalkinPaymentsView
+                onBack={() => setActiveOwnerPage('walkin_pos')}
+                onNavigatePOS={() => setActiveOwnerPage('walkin_pos')}
+              />
+            ) : activeOwnerPage === 'expense_tracker' ? (
+              <ExpenseTrackerView
                 expenses={expenses}
-                workers={workers}
-                cleanings={cleanings}
+                onAddExpense={(exp) => handleAddExpense({ ...exp, id: `exp-${Date.now()}` })}
+                onDeleteExpense={handleDeleteExpense}
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'meal_plans_pricing' ? (
+              <MealPlansPricingView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'meal_rate_timing' ? (
+              <MealRateTimingView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'weekly_menu' ? (
+              <WeeklyMenuEditorView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'polls' ? (
+              <PollsManagerView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'reminders' ? (
+              <RemindersNoticesView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'meal_ratings' ? (
+              <MealRatingsView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'complaints_tracker' ? (
+              <ComplaintsTrackerView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'mess_settings' ? (
+              <MessSettingsView
                 rules={rules}
-                currentRole={currentRole}
-                onOpenScanner={() => setIsScannerOpen(true)}
-                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
-                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
-                onOpenAddExpense={() => setCurrentTab('expenses')}
-                onOpenCardPrint={(c) => setSelectedPrintCustomer(c)}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                onNavigateTab={setCurrentTab}
-                onApproveLeave={handleApproveLeave}
-                onRejectLeave={handleRejectLeave}
-                onCreateTestLeave={handleCreateTestLeave}
-                onOpenLeaveApprovalsTab={() => {
-                  setReportsInitialTab('leave_approvals');
-                  setCurrentTab('reports');
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onSaveRules={(newRules) => {
+                  setRules(newRules);
+                  saveRules(newRules);
                 }}
               />
-            ) : currentTab === 'customers' ? (
+            ) : activeOwnerPage === 'staff_management' ? (
+              <StaffManagementView
+                workers={workers}
+                cleanings={cleanings}
+                onBack={() => setActiveOwnerPage('dashboard')}
+                onAddWorker={(w) => handleAddWorker({ ...w, id: `worker-${Date.now()}`, attendance: {} })}
+                onDeleteWorker={handleDeleteWorker}
+                onUpdateWorkerAttendance={(id, date, status) => handleUpdateWorkerAttendance(id, date, status === 'leave' ? 'absent' : status)}
+              />
+            ) : activeOwnerPage === 'roles_permissions' ? (
+              <RolesPermissionsView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : activeOwnerPage === 'my_mess' || activeOwnerPage === 'my_account' ? (
+              <MyMessProfileView
+                messName={rules.messName}
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
+            ) : ['attendance_reports', 'customer_reports', 'payment_reports', 'expense_reports', 'business_summary', 'excel_export', 'security_log'].includes(activeOwnerPage) ? (
+              <AuditAndReportsView
+                customers={customers}
+                expenses={expenses}
+                workers={workers}
+                trials={trials}
+                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+                onAddTrial={handleAddTrial}
+                onConvertTrialToCustomer={handleConvertTrialToCustomer}
+                onApproveLeave={handleApproveLeave}
+                onRejectLeave={handleRejectLeave}
+                initialTab={
+                  activeOwnerPage === 'attendance_reports' ? 'leave_approvals' :
+                  activeOwnerPage === 'customer_reports' ? 'expiry_watch' : 'pnl'
+                }
+                onTabChange={setReportsInitialTab}
+              />
+            ) : activeOwnerPage === 'customers' ? (
               <CustomersListView
                 customers={customers}
                 onOpenAddModal={() => setIsAddCustomerOpen(true)}
@@ -937,10 +1154,10 @@ export function App() {
                 onDeleteCustomer={handleDeleteCustomer}
                 onClearAllCustomers={handleClearAllCustomers}
               />
-            ) : currentTab === 'meals' ? (
+            ) : currentTab === 'meals' || (activeOwnerPage as any) === 'meals' ? (
               <MealLogsView
                 mealLogs={mealLogs}
-                onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
               />
             ) : currentTab === 'expenses' ? (
               <ExpensesView
@@ -957,7 +1174,7 @@ export function App() {
                 onDeleteWorker={handleDeleteWorker}
                 onAddCleaning={handleAddCleaning}
               />
-            ) : (
+            ) : currentTab === 'reports' ? (
               <AuditAndReportsView
                 customers={customers}
                 expenses={expenses}
@@ -971,6 +1188,40 @@ export function App() {
                 onRejectLeave={handleRejectLeave}
                 initialTab={reportsInitialTab}
                 onTabChange={setReportsInitialTab}
+              />
+            ) : (
+              <DashboardView
+                customers={customers}
+                mealLogs={mealLogs}
+                expenses={expenses}
+                workers={workers}
+                cleanings={cleanings}
+                rules={rules}
+                currentRole={currentRole}
+                onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
+                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
+                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+                onOpenAddExpense={() => setActiveOwnerPage('expense_tracker')}
+                onOpenCardPrint={(c) => setSelectedPrintCustomer(c)}
+                onOpenCustomer360={(c) => setSelected360Customer(c)}
+                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                onOpenSettings={() => setActiveOwnerPage('mess_settings')}
+                onNavigateTab={(tab) => {
+                  setCurrentTab(tab);
+                  if (tab === 'dashboard') setActiveOwnerPage('dashboard');
+                  else if (tab === 'customers') setActiveOwnerPage('customers');
+                  else if (tab === 'meals') setActiveOwnerPage('meals' as any);
+                  else if (tab === 'payments') setActiveOwnerPage('billing_payments');
+                  else if (tab === 'expenses') setActiveOwnerPage('expense_tracker');
+                  else if (tab === 'workers') setActiveOwnerPage('staff_management');
+                  else if (tab === 'reports') setActiveOwnerPage('business_summary');
+                }}
+                onApproveLeave={handleApproveLeave}
+                onRejectLeave={handleRejectLeave}
+                onCreateTestLeave={handleCreateTestLeave}
+                onOpenLeaveApprovalsTab={() => {
+                  setActiveOwnerPage('attendance_reports');
+                }}
               />
             )}
           </main>
@@ -1150,9 +1401,14 @@ export function App() {
         onRefresh={loadOwnerNotifications}
         isLoading={isNotificationsLoading}
         onSelectRecord={(_type, customerId) => {
-          if (customerId) {
+          if (['payment_received', 'cash_payment', 'upi_payment', 'payment_verification', 'outstanding_fee'].includes(_type)) {
+            setCurrentTab('payments');
+            setActiveOwnerPage('billing_payments');
+            setIsNotificationCenterOpen(false);
+          } else if (customerId) {
             const matched = customers.find(c => c.id === customerId);
             if (matched) setSelected360Customer(matched);
+            setIsNotificationCenterOpen(false);
           }
         }}
       />

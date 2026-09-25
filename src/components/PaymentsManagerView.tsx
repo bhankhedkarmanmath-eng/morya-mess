@@ -82,6 +82,18 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
   useEffect(() => {
     loadPayments();
     loadUpiConfig();
+
+    const handleUpdate = () => {
+      loadPayments();
+    };
+
+    window.addEventListener('morya_payment_created', handleUpdate);
+    window.addEventListener('morya_payment_updated', handleUpdate);
+
+    return () => {
+      window.removeEventListener('morya_payment_created', handleUpdate);
+      window.removeEventListener('morya_payment_updated', handleUpdate);
+    };
   }, []);
 
   const loadUpiConfig = async () => {
@@ -206,9 +218,13 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
     e.preventDefault();
     if (!selectedCustomerId || !amount || Number(amount) <= 0) return;
 
+    const cust = customers.find(c => c.id === selectedCustomerId);
+
     setIsSubmitting(true);
     const res = await recordNewPaymentInSupabase({
       customerId: selectedCustomerId,
+      customerName: cust?.name,
+      customerPhone: cust?.phone,
       amount: Number(amount),
       paymentMode,
       transactionReference: transactionRef || undefined,

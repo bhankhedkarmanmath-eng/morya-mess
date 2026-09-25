@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import confetti from 'canvas-confetti';
-import { Customer, MealLog, MessShiftAudit } from '../types/mess';
+import { Customer, MealLog, MessShiftAudit, SupabasePaymentRecord } from '../types/mess';
 import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift } from '../lib/storage';
 import { validateAndRecordStudentAttendance } from '../lib/supabaseSync';
-import { fetchMessUpiConfig, recordNewPaymentInSupabase, MessUpiConfig } from '../lib/ownerFeaturesApi';
+import { fetchMessUpiConfig, recordNewPaymentInSupabase, fetchPaymentsFromSupabase, MessUpiConfig } from '../lib/ownerFeaturesApi';
 import { 
   QrCode, 
   Calendar, 
@@ -93,6 +93,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const [payNotes, setPayNotes] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
+  const [studentPayments, setStudentPayments] = useState<SupabasePaymentRecord[]>([]);
   const [copiedUpi, setCopiedUpi] = useState(false);
 
   // Universal Counter Standee Scanner State
@@ -359,15 +361,40 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     });
   }, []);
 
+  // Load student's submitted payment requests and listen for owner verifications
+  const loadStudentPayments = useCallback(async () => {
+    try {
+      const all = await fetchPaymentsFromSupabase();
+      const mine = all.filter(p => p.customerId === customer.id || (customer.phone && p.customerPhone === customer.phone));
+      setStudentPayments(mine);
+    } catch (e) {
+      console.warn('Failed to load student payments:', e);
+    }
+  }, [customer.id, customer.phone]);
+
+  useEffect(() => {
+    loadStudentPayments();
+    const handleUpdate = () => loadStudentPayments();
+    window.addEventListener('morya_payment_updated', handleUpdate);
+    window.addEventListener('morya_payment_created', handleUpdate);
+    return () => {
+      window.removeEventListener('morya_payment_updated', handleUpdate);
+      window.removeEventListener('morya_payment_created', handleUpdate);
+    };
+  }, [loadStudentPayments]);
+
   const handleRecordStudentPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payAmount || Number(payAmount) <= 0) return;
 
     setIsSubmittingPayment(true);
     setPaymentSuccessMessage(null);
+    setPaymentErrorMessage(null);
 
     const res = await recordNewPaymentInSupabase({
       customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
       amount: Number(payAmount),
       paymentMode: 'upi',
       transactionReference: payUtr.trim() || undefined,
@@ -376,16 +403,17 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     });
 
     if (res.success) {
-      setPaymentSuccessMessage(`Payment of ₹${payAmount} submitted! Reference recorded. Status is PENDING verification by Mess Owner.`);
+      setPaymentSuccessMessage(`Payment of ₹${payAmount} submitted successfully! Reference (UTR: ${payUtr || 'Recorded'}) sent. Status is PENDING verification by Mess Owner.`);
       setPayUtr('');
       setPayNotes('');
+      await loadStudentPayments();
       confetti({
-        particleCount: 50,
+        particleCount: 60,
         spread: 60,
         origin: { y: 0.6 }
       });
     } else {
-      alert(res.error || 'Failed to record payment');
+      setPaymentErrorMessage(res.error || 'Failed to submit payment verification request. Please check connection and try again.');
     }
     setIsSubmittingPayment(false);
   };
@@ -1360,6 +1388,17 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
           </div>
 
+          {/* Error Banner */}
+          {paymentErrorMessage && (
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
+              <div className="font-black text-sm flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <span>Verification Request Error</span>
+              </div>
+              <p className="text-[11px] opacity-90">{paymentErrorMessage}</p>
+            </div>
+          )}
+
           {/* Success Banner */}
           {paymentSuccessMessage && (
             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
@@ -1441,6 +1480,65 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               )}
             </button>
           </form>
+
+          {/* Student Submitted Payments History */}
+          {studentPayments.length > 0 && (
+            <div className="border-t border-slate-200/80 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-orange-600" />
+                  <span>Your Submitted Payments ({studentPayments.length})</span>
+                </h4>
+                <span className="text-[10px] text-slate-400 font-medium">Auto-refreshed</span>
+              </div>
+
+              <div className="space-y-2">
+                {studentPayments.map(p => (
+                  <div 
+                    key={p.id}
+                    className="p-3 rounded-2xl border border-slate-200 bg-slate-50/80 flex items-center justify-between gap-2.5 text-xs"
+                  >
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-slate-900 text-sm">₹{p.amount}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-slate-200 text-slate-700 font-mono">
+                          {p.paymentMode}
+                        </span>
+                        {p.transactionReference && (
+                          <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                            UTR: {p.transactionReference}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 truncate">{p.notes || 'UPI Payment'}</p>
+                      <span className="text-[10px] text-slate-400 block font-mono">
+                        {new Date(p.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      {p.status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                          <Clock className="w-3 h-3 animate-pulse" />
+                          <span>Pending Owner Review</span>
+                        </span>
+                      ) : p.status === 'verified' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified by Owner</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                          <AlertCircle className="w-3 h-3 text-rose-600" />
+                          <span>Reversed</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

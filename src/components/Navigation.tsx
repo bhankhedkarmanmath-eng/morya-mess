@@ -15,13 +15,14 @@ import {
   Calendar, 
   Layers,
   Menu,
-  Bell
+  Bell,
+  CreditCard
 } from 'lucide-react';
 import { UserRole } from '../types/mess';
 
 interface NavigationProps {
   currentTab: string;
-  onTabChange: (tabId: 'dashboard' | 'customers' | 'meals' | 'expenses' | 'workers' | 'reports') => void;
+  onTabChange: (tabId: 'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports') => void;
   currentRole: UserRole;
   onRoleChange: (role: UserRole) => void;
   onOpenScanner: () => void;
@@ -29,6 +30,7 @@ interface NavigationProps {
   onOpenSettings: () => void;
   messName?: string;
   pendingLeavesCount?: number;
+  pendingPaymentsCount?: number;
   onSwitchPortal?: () => void;
   onLogout?: () => void;
   userEmail?: string;
@@ -48,6 +50,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenSettings,
   messName = 'MORYA MESS',
   pendingLeavesCount = 0,
+  pendingPaymentsCount = 0,
   onSwitchPortal,
   onLogout,
   userEmail,
@@ -55,10 +58,16 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenNotifications,
   unreadNotificationsCount = 0
 }) => {
-  const navItems: { id: 'dashboard' | 'customers' | 'meals' | 'expenses' | 'workers' | 'reports'; label: string; icon: React.ElementType; badge?: number }[] = [
+  const navItems: { id: 'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports'; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers', label: 'Members', icon: Users },
     { id: 'meals', label: 'Gate Attendance', icon: Utensils },
+    { 
+      id: 'payments', 
+      label: 'Billing & Payments', 
+      icon: CreditCard,
+      badge: pendingPaymentsCount > 0 ? pendingPaymentsCount : undefined
+    },
     { id: 'expenses', label: 'Expenses', icon: Receipt },
     { id: 'workers', label: 'Staff & Kitchen', icon: UserCheck },
     { 

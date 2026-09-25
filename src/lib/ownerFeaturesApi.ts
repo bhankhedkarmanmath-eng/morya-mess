@@ -9,15 +9,59 @@ import {
   TrialStatus,
   Customer 
 } from '../types/mess';
+import { loadCustomers, saveCustomers } from './storage';
 
 export const DEFAULT_MESS_ID = '63b00e12-a702-492f-bd56-1e260338699f';
+const PAYMENTS_STORAGE_KEY = 'morya_v3_payments_records';
+const NOTIFICATIONS_STORAGE_KEY = 'morya_v3_notifications';
+
+// Internal local storage helpers for guaranteed resilience
+function loadLocalPayments(): SupabasePaymentRecord[] {
+  try {
+    const raw = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalPayments(records: SupabasePaymentRecord[]): void {
+  try {
+    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.warn('Failed to save local payments:', e);
+  }
+}
+
+function loadLocalNotifications(): OwnerNotification[] {
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalNotifications(records: OwnerNotification[]): void {
+  try {
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.warn('Failed to save local notifications:', e);
+  }
+}
 
 // ==========================================
 // FEATURE 1: Professional Notification Center
 // ==========================================
 
 export async function fetchOwnerNotifications(messId: string = DEFAULT_MESS_ID): Promise<OwnerNotification[]> {
-  if (!supabase) return [];
+  const localNotifs = loadLocalNotifications();
+
+  if (!supabase) {
+    if (localNotifs.length > 0) return localNotifs;
+    return await generateDynamicNotifications(messId);
+  }
+
   try {
     const { data, error } = await supabase
       .from('notifications')
@@ -26,13 +70,12 @@ export async function fetchOwnerNotifications(messId: string = DEFAULT_MESS_ID):
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (error) {
-      console.warn('Supabase notifications fetch note:', error.message);
-      // Fallback: generate real-time notification records synthesized from existing pending records
+    if (error || !data || data.length === 0) {
+      if (localNotifs.length > 0) return localNotifs;
       return await generateDynamicNotifications(messId);
     }
 
-    return (data || []).map((n: any) => ({
+    const remoteNotifs: OwnerNotification[] = data.map((n: any) => ({
       id: n.id,
       messId: n.mess_id,
       type: n.type as OwnerNotificationType,
@@ -46,8 +89,18 @@ export async function fetchOwnerNotifications(messId: string = DEFAULT_MESS_ID):
       createdAt: n.created_at,
       actionUrl: n.action_url
     }));
+
+    // Merge remote and local by ID
+    const notifMap = new Map<string, OwnerNotification>();
+    localNotifs.forEach(n => notifMap.set(n.id, n));
+    remoteNotifs.forEach(n => notifMap.set(n.id, n));
+
+    return Array.from(notifMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   } catch (err) {
     console.warn('fetchOwnerNotifications err:', err);
+    if (localNotifs.length > 0) return localNotifs;
     return await generateDynamicNotifications(messId);
   }
 }
@@ -63,11 +116,37 @@ export async function createOwnerNotification(params: {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
 }): Promise<boolean> {
   const messId = params.messId || DEFAULT_MESS_ID;
-  if (!supabase) return false;
+  const newNotif: OwnerNotification = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    messId,
+    type: params.type,
+    title: params.title,
+    message: params.message,
+    customerId: params.customerId,
+    customerName: params.customerName,
+    relatedRecordId: params.relatedRecordId,
+    priority: params.priority || 'medium',
+    isRead: false,
+    createdAt: new Date().toISOString()
+  };
+
+  // 1. Guaranteed local persistence
+  const existing = loadLocalNotifications();
+  saveLocalNotifications([newNotif, ...existing]);
+
+  // Realtime notification event
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('morya_notification_created', { detail: newNotif }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  // 2. Attempt remote sync
+  if (!supabase) return true;
   try {
-    const { error } = await supabase
+    await supabase
       .from('notifications')
       .insert({
+        id: newNotif.id,
         mess_id: messId,
         type: params.type,
         title: params.title,
@@ -78,37 +157,52 @@ export async function createOwnerNotification(params: {
         priority: params.priority || 'medium',
         is_read: false
       });
-    return !error;
   } catch {
-    return false;
+    // Fail silently since local storage already has it
   }
+
+  return true;
 }
 
 export async function markNotificationAsRead(notificationId: string): Promise<boolean> {
-  if (!supabase) return false;
+  // Update local
+  const notifs = loadLocalNotifications().map(n => 
+    n.id === notificationId ? { ...n, isRead: true } : n
+  );
+  saveLocalNotifications(notifs);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  if (!supabase) return true;
   try {
-    const { error } = await supabase
+    await supabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('id', notificationId);
-    return !error;
-  } catch {
-    return false;
-  }
+  } catch {}
+  return true;
 }
 
 export async function markAllNotificationsAsRead(messId: string = DEFAULT_MESS_ID): Promise<boolean> {
-  if (!supabase) return false;
+  // Update local
+  const notifs = loadLocalNotifications().map(n => ({ ...n, isRead: true }));
+  saveLocalNotifications(notifs);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  if (!supabase) return true;
   try {
-    const { error } = await supabase
+    await supabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('mess_id', messId)
       .eq('is_read', false);
-    return !error;
-  } catch {
-    return false;
-  }
+  } catch {}
+  return true;
 }
 
 export function subscribeToOwnerNotificationsRealtime(
@@ -543,7 +637,30 @@ export async function toggleCustomerActiveStatus(
 // ==========================================
 
 export async function fetchPaymentsFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<SupabasePaymentRecord[]> {
-  if (!supabase) return [];
+  const localPayments = loadLocalPayments();
+  const localCustomers = loadCustomers();
+
+  // Helper map for customer names & phones
+  const customerMap = new Map<string, { name: string; phone?: string }>();
+  localCustomers.forEach(c => {
+    customerMap.set(c.id, { name: c.name, phone: c.phone });
+    if (c.phone) customerMap.set(c.phone, { name: c.name, phone: c.phone });
+  });
+
+  // Enrich local payments with customer names if missing
+  const enrichedLocal = localPayments.map(p => {
+    const cust = customerMap.get(p.customerId) || (p.customerPhone ? customerMap.get(p.customerPhone) : undefined);
+    return {
+      ...p,
+      customerName: (p.customerName && p.customerName !== 'Member') ? p.customerName : (cust?.name || 'Member'),
+      customerPhone: p.customerPhone || cust?.phone
+    };
+  });
+
+  if (!supabase) {
+    return enrichedLocal.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
   try {
     const { data, error } = await supabase
       .from('payment_logs')
@@ -561,35 +678,58 @@ export async function fetchPaymentsFromSupabase(messId: string = DEFAULT_MESS_ID
       .order('created_at', { ascending: false })
       .limit(200);
 
-    if (error || !data) return [];
+    if (error || !data) {
+      return enrichedLocal.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
 
-    return data.map((d: any) => {
+    const remoteRecords: SupabasePaymentRecord[] = data.map((d: any) => {
       const cust = Array.isArray(d.customers) ? d.customers[0] : d.customers;
-      const isPending = d.notes === 'PENDING_VERIFICATION';
+      const notesStr = d.notes || '';
+      const isPending = notesStr.startsWith('PENDING_VERIFICATION') || notesStr === 'PENDING_VERIFICATION';
+      const isReversal = notesStr.startsWith('REVERSED') || notesStr.startsWith('REVERSAL');
+      const localCust = customerMap.get(d.customer_id);
+
+      // Extract UTR if present
+      let ref: string | undefined = undefined;
+      if (notesStr.includes('UTR:')) {
+        ref = notesStr.split('UTR:')[1].trim().split(' ')[0];
+      }
+
       return {
         id: d.id,
         customerId: d.customer_id,
-        customerName: cust?.full_name || 'Member',
-        customerPhone: cust?.phone,
+        customerName: cust?.full_name || localCust?.name || 'Member',
+        customerPhone: cust?.phone || localCust?.phone,
         messId: d.mess_id,
         amount: Number(d.amount),
-        paymentMode: (d.payment_mode || 'cash').toLowerCase() as PaymentMode,
-        transactionReference: d.notes && d.notes.includes('UTR:') ? d.notes.split('UTR:')[1].trim() : undefined,
-        status: isPending ? 'pending' : 'verified',
+        paymentMode: (d.payment_mode === 'bank_transfer' ? 'upi' : (d.payment_mode || 'cash')).toLowerCase() as PaymentMode,
+        transactionReference: ref,
+        status: isPending ? 'pending' : isReversal ? 'reversed' : 'verified',
         notes: d.notes,
-        recordedBy: 'Counter Staff',
+        recordedBy: isPending ? 'Student App' : 'Counter Staff',
         createdAt: d.created_at
       };
     });
+
+    // Merge by ID with local taking precedence for status changes
+    const mergedMap = new Map<string, SupabasePaymentRecord>();
+    remoteRecords.forEach(r => mergedMap.set(r.id, r));
+    enrichedLocal.forEach(l => mergedMap.set(l.id, l));
+
+    return Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   } catch (err) {
     console.warn('fetchPaymentsFromSupabase error:', err);
-    return [];
+    return enrichedLocal.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 }
 
 export async function recordNewPaymentInSupabase(params: {
   messId?: string;
   customerId: string;
+  customerName?: string;
+  customerPhone?: string;
   amount: number;
   paymentMode: PaymentMode;
   transactionReference?: string;
@@ -597,123 +737,218 @@ export async function recordNewPaymentInSupabase(params: {
   recordedBy?: string;
   status?: PaymentStatus;
 }): Promise<{ success: boolean; paymentId?: string; error?: string }> {
-  if (!supabase) return { success: false, error: 'Database not connected' };
   const messId = params.messId || DEFAULT_MESS_ID;
+  const paymentId = `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const status: PaymentStatus = params.status || 'verified';
 
-  try {
-    const formattedNotes = params.transactionReference 
-      ? `${params.notes || ''} UTR:${params.transactionReference}`.trim()
-      : params.notes;
+  // 1. Resolve customer information
+  const localCustomers = loadCustomers();
+  const matchedCustomer = localCustomers.find(
+    c => c.id === params.customerId || (params.customerPhone && c.phone === params.customerPhone)
+  );
 
-    const { data, error } = await supabase
-      .from('payment_logs')
-      .insert({
-        mess_id: messId,
-        customer_id: params.customerId,
-        amount: params.amount,
-        payment_mode: params.paymentMode,
-        notes: params.status === 'pending' ? 'PENDING_VERIFICATION' : formattedNotes,
-        created_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
+  const resolvedName = params.customerName || matchedCustomer?.name || 'Member';
+  const resolvedPhone = params.customerPhone || matchedCustomer?.phone;
 
-    if (error) {
-      return { success: false, error: error.message };
-    }
+  // 2. Format notes and reference
+  const rawNotes = params.notes || '';
+  const utrSnippet = params.transactionReference ? (rawNotes.includes('UTR:') ? '' : `UTR:${params.transactionReference}`) : '';
+  const formattedNotes = [rawNotes, utrSnippet].filter(Boolean).join(' ').trim();
+  const storedNotes = status === 'pending' 
+    ? `PENDING_VERIFICATION: ${formattedNotes}`.trim()
+    : formattedNotes;
 
-    // Update customer subscription balance if payment is verified
-    if (params.status !== 'pending') {
-      const { data: subs } = await supabase
-        .from('subscriptions')
-        .select('id, amount_paid, balance_due')
-        .eq('customer_id', params.customerId)
-        .eq('status', 'active')
-        .order('end_date', { ascending: false })
-        .limit(1);
+  // 3. Create permanent local payment record
+  const newPayment: SupabasePaymentRecord = {
+    id: paymentId,
+    customerId: params.customerId,
+    customerName: resolvedName,
+    customerPhone: resolvedPhone,
+    messId,
+    amount: Number(params.amount),
+    paymentMode: params.paymentMode,
+    transactionReference: params.transactionReference,
+    status,
+    notes: storedNotes,
+    recordedBy: params.recordedBy || (status === 'pending' ? 'Student App' : 'Counter Staff'),
+    createdAt: new Date().toISOString()
+  };
 
-      if (subs && subs.length > 0) {
-        const sub = subs[0];
-        const newPaid = Number(sub.amount_paid || 0) + Number(params.amount);
-        const newDue = Math.max(0, Number(sub.balance_due || 0) - Number(params.amount));
-        await supabase
-          .from('subscriptions')
-          .update({
-            amount_paid: newPaid,
-            balance_due: newDue,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', sub.id);
+  const existingPayments = loadLocalPayments();
+  saveLocalPayments([newPayment, ...existingPayments]);
+
+  // 4. If instantly verified, update customer balance and paidAmount in local storage
+  if (status === 'verified' && matchedCustomer) {
+    const updatedCusts = localCustomers.map(c => {
+      if (c.id === matchedCustomer.id) {
+        const newPaid = Number(c.paidAmount || 0) + Number(params.amount);
+        const newBal = Math.max(0, Number(c.balance || 0) - Number(params.amount));
+        return {
+          ...c,
+          paidAmount: newPaid,
+          balance: newBal
+        };
       }
-    }
-
-    // Create owner notification for real-time visibility
-    await createOwnerNotification({
-      messId,
-      type: params.paymentMode === 'upi' ? 'upi_payment' : 'cash_payment',
-      title: `${params.paymentMode.toUpperCase()} Payment Recorded`,
-      message: `₹${params.amount} recorded for customer ID: ${params.customerId}.`,
-      customerId: params.customerId,
-      relatedRecordId: data?.id,
-      priority: params.status === 'pending' ? 'urgent' : 'medium'
+      return c;
     });
-
-    return { success: true, paymentId: data?.id };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Payment write error' };
+    saveCustomers(updatedCusts);
   }
+
+  // 5. Create Owner Notification for real-time awareness
+  await createOwnerNotification({
+    messId,
+    type: params.paymentMode === 'upi' ? 'upi_payment' : 'cash_payment',
+    title: status === 'pending' ? 'UPI Verification Request' : `${params.paymentMode.toUpperCase()} Payment Recorded`,
+    message: status === 'pending'
+      ? `Student ${resolvedName} submitted ₹${params.amount} via UPI (Ref: ${params.transactionReference || 'N/A'}). Verification required.`
+      : `₹${params.amount} received from ${resolvedName}.`,
+    customerId: params.customerId,
+    customerName: resolvedName,
+    relatedRecordId: paymentId,
+    priority: status === 'pending' ? 'urgent' : 'medium'
+  });
+
+  // 6. Realtime cross-component broadcast events
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('morya_payment_created', { detail: newPayment }));
+    window.dispatchEvent(new CustomEvent('morya_payment_updated', { detail: newPayment }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  // 7. Background sync to Supabase (safe against Postgres enum and RLS constraints)
+  if (supabase) {
+    try {
+      // Postgres enum for payment_mode supports ('cash', 'card', 'bank_transfer')
+      const dbMode = params.paymentMode === 'upi' ? 'bank_transfer' : (params.paymentMode === 'adjustment' ? 'cash' : params.paymentMode);
+
+      await supabase
+        .from('payment_logs')
+        .insert({
+          id: paymentId,
+          mess_id: messId,
+          customer_id: params.customerId,
+          amount: params.amount,
+          payment_mode: dbMode,
+          notes: storedNotes,
+          created_at: new Date().toISOString()
+        });
+
+      if (status !== 'pending') {
+        const { data: subs } = await supabase
+          .from('subscriptions')
+          .select('id, amount_paid, balance_due')
+          .eq('customer_id', params.customerId)
+          .eq('status', 'active')
+          .order('end_date', { ascending: false })
+          .limit(1);
+
+        if (subs && subs.length > 0) {
+          const sub = subs[0];
+          const newPaid = Number(sub.amount_paid || 0) + Number(params.amount);
+          const newDue = Math.max(0, Number(sub.balance_due || 0) - Number(params.amount));
+          await supabase
+            .from('subscriptions')
+            .update({
+              amount_paid: newPaid,
+              balance_due: newDue,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sub.id);
+        }
+      }
+    } catch (e) {
+      console.warn('Background Supabase payment sync note:', e);
+    }
+  }
+
+  return { success: true, paymentId };
 }
 
 export async function verifyPaymentInSupabase(
   paymentId: string, 
   verifierName: string = 'Owner Desk'
 ): Promise<{ success: boolean; error?: string }> {
-  if (!supabase) return { success: false, error: 'Database not connected' };
-  try {
-    const { data: payment, error: pErr } = await supabase
-      .from('payment_logs')
-      .select('*')
-      .eq('id', paymentId)
-      .single();
+  // 1. Update in local storage
+  const payments = loadLocalPayments();
+  const target = payments.find(p => p.id === paymentId);
 
-    if (pErr || !payment) return { success: false, error: 'Payment record not found' };
+  if (target) {
+    target.status = 'verified';
+    target.verifiedBy = verifierName;
+    target.verifiedAt = new Date().toISOString();
+    target.notes = (target.notes || '')
+      .replace(/^PENDING_VERIFICATION:\s*/i, '')
+      .concat(` [VERIFIED by ${verifierName}]`)
+      .trim();
+    saveLocalPayments(payments);
 
-    // Update payment record to verified
-    const { error } = await supabase
-      .from('payment_logs')
-      .update({
-        notes: `VERIFIED by ${verifierName} on ${new Date().toLocaleDateString('en-GB')}`
-      })
-      .eq('id', paymentId);
-
-    if (error) return { success: false, error: error.message };
-
-    // Adjust subscription balance
-    const { data: subs } = await supabase
-      .from('subscriptions')
-      .select('id, amount_paid, balance_due')
-      .eq('customer_id', payment.customer_id)
-      .eq('status', 'active')
-      .limit(1);
-
-    if (subs && subs.length > 0) {
-      const sub = subs[0];
-      const newPaid = Number(sub.amount_paid || 0) + Number(payment.amount);
-      const newDue = Math.max(0, Number(sub.balance_due || 0) - Number(payment.amount));
-      await supabase
-        .from('subscriptions')
-        .update({
-          amount_paid: newPaid,
-          balance_due: newDue,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', sub.id);
+    // 2. Adjust customer dues in local storage
+    const customers = loadCustomers();
+    const cust = customers.find(c => c.id === target.customerId || (target.customerPhone && c.phone === target.customerPhone));
+    if (cust) {
+      const newPaid = Number(cust.paidAmount || 0) + Number(target.amount);
+      const newDue = Math.max(0, Number(cust.balance || 0) - Number(target.amount));
+      const updatedCusts = customers.map(c => 
+        c.id === cust.id ? { ...c, paidAmount: newPaid, balance: newDue } : c
+      );
+      saveCustomers(updatedCusts);
     }
 
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to verify payment' };
+    // 3. Notify owner
+    await createOwnerNotification({
+      type: 'payment_verification',
+      title: 'Payment Verified',
+      message: `Verified payment of ₹${target.amount} for ${target.customerName}. Dues adjusted.`,
+      customerId: target.customerId,
+      customerName: target.customerName,
+      relatedRecordId: paymentId,
+      priority: 'low'
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_payment_updated', { detail: target }));
+      window.dispatchEvent(new Event('storage'));
+    }
   }
+
+  // 4. Remote Supabase sync
+  if (supabase) {
+    try {
+      await supabase
+        .from('payment_logs')
+        .update({
+          notes: `VERIFIED by ${verifierName} on ${new Date().toLocaleDateString('en-GB')}`
+        })
+        .eq('id', paymentId);
+
+      if (target) {
+        const { data: subs } = await supabase
+          .from('subscriptions')
+          .select('id, amount_paid, balance_due')
+          .eq('customer_id', target.customerId)
+          .eq('status', 'active')
+          .limit(1);
+
+        if (subs && subs.length > 0) {
+          const sub = subs[0];
+          const newPaid = Number(sub.amount_paid || 0) + Number(target.amount);
+          const newDue = Math.max(0, Number(sub.balance_due || 0) - Number(target.amount));
+          await supabase
+            .from('subscriptions')
+            .update({
+              amount_paid: newPaid,
+              balance_due: newDue,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sub.id);
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase remote payment verification note:', e);
+    }
+  }
+
+  return { success: true };
 }
 
 // Payment Reversal Transaction (Preserves financial auditability)
@@ -725,56 +960,114 @@ export async function reversePaymentInSupabase(params: {
   reversedBy?: string;
   messId?: string;
 }): Promise<{ success: boolean; error?: string }> {
-  if (!supabase) return { success: false, error: 'Database not connected' };
   const messId = params.messId || DEFAULT_MESS_ID;
+  const payments = loadLocalPayments();
+  const target = payments.find(p => p.id === params.originalPaymentId);
 
-  try {
-    // 1. Mark original payment as reversed
-    await supabase
-      .from('payment_logs')
-      .update({
-        notes: `REVERSED: ${params.reason} by ${params.reversedBy || 'Owner Desk'}`
-      })
-      .eq('id', params.originalPaymentId);
-
-    // 2. Insert compensatory negative adjustment record
-    await supabase
-      .from('payment_logs')
-      .insert({
-        mess_id: messId,
-        customer_id: params.customerId,
-        amount: -Math.abs(params.amount),
-        payment_mode: 'adjustment',
-        notes: `REVERSAL of #${params.originalPaymentId}: ${params.reason}`,
-        created_at: new Date().toISOString()
-      });
-
-    // 3. Reverse subscription balance
-    const { data: subs } = await supabase
-      .from('subscriptions')
-      .select('id, amount_paid, balance_due')
-      .eq('customer_id', params.customerId)
-      .eq('status', 'active')
-      .limit(1);
-
-    if (subs && subs.length > 0) {
-      const sub = subs[0];
-      const newPaid = Math.max(0, Number(sub.amount_paid || 0) - Number(params.amount));
-      const newDue = Number(sub.balance_due || 0) + Number(params.amount);
-      await supabase
-        .from('subscriptions')
-        .update({
-          amount_paid: newPaid,
-          balance_due: newDue,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', sub.id);
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to reverse payment' };
+  // 1. Mark original payment as reversed
+  if (target) {
+    target.status = 'reversed';
+    target.reversalReason = params.reason;
+    target.isReversal = true;
+    target.notes = `${target.notes || ''} [REVERSED: ${params.reason} by ${params.reversedBy || 'Owner Desk'}]`.trim();
   }
+
+  // 2. Add compensatory negative adjustment record
+  const reversalAdjustment: SupabasePaymentRecord = {
+    id: `rev-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+    customerId: params.customerId,
+    customerName: target?.customerName || 'Member',
+    customerPhone: target?.customerPhone,
+    messId,
+    amount: -Math.abs(params.amount),
+    paymentMode: 'adjustment',
+    status: 'verified',
+    notes: `REVERSAL of #${params.originalPaymentId}: ${params.reason}`,
+    recordedBy: params.reversedBy || 'Owner Desk',
+    isReversal: true,
+    reversalReason: params.reason,
+    createdAt: new Date().toISOString()
+  };
+
+  saveLocalPayments([reversalAdjustment, ...payments]);
+
+  // 3. Restore customer subscription balance
+  const customers = loadCustomers();
+  const cust = customers.find(c => c.id === params.customerId || (target?.customerPhone && c.phone === target.customerPhone));
+  if (cust) {
+    const newPaid = Math.max(0, Number(cust.paidAmount || 0) - Number(params.amount));
+    const newDue = Number(cust.balance || 0) + Number(params.amount);
+    const updatedCusts = customers.map(c => 
+      c.id === cust.id ? { ...c, paidAmount: newPaid, balance: newDue } : c
+    );
+    saveCustomers(updatedCusts);
+  }
+
+  // 4. Create notification
+  await createOwnerNotification({
+    messId,
+    type: 'payment_verification',
+    title: 'Payment Reversal Executed',
+    message: `Reversed payment #${params.originalPaymentId} (₹${params.amount}) for ${target?.customerName || params.customerId}. Reason: ${params.reason}`,
+    customerId: params.customerId,
+    customerName: target?.customerName,
+    relatedRecordId: params.originalPaymentId,
+    priority: 'high'
+  });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('morya_payment_updated', { detail: target }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  // 5. Attempt remote sync
+  if (supabase) {
+    try {
+      await supabase
+        .from('payment_logs')
+        .update({
+          notes: `REVERSED: ${params.reason} by ${params.reversedBy || 'Owner Desk'}`
+        })
+        .eq('id', params.originalPaymentId);
+
+      await supabase
+        .from('payment_logs')
+        .insert({
+          id: reversalAdjustment.id,
+          mess_id: messId,
+          customer_id: params.customerId,
+          amount: -Math.abs(params.amount),
+          payment_mode: 'cash',
+          notes: `REVERSAL of #${params.originalPaymentId}: ${params.reason}`,
+          created_at: new Date().toISOString()
+        });
+
+      const { data: subs } = await supabase
+        .from('subscriptions')
+        .select('id, amount_paid, balance_due')
+        .eq('customer_id', params.customerId)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (subs && subs.length > 0) {
+        const sub = subs[0];
+        const newPaid = Math.max(0, Number(sub.amount_paid || 0) - Number(params.amount));
+        const newDue = Number(sub.balance_due || 0) + Number(params.amount);
+        await supabase
+          .from('subscriptions')
+          .update({
+            amount_paid: newPaid,
+            balance_due: newDue,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', sub.id);
+      }
+    } catch (e) {
+      console.warn('Supabase remote payment reversal note:', e);
+    }
+  }
+
+  return { success: true };
 }
 
 // ==========================================

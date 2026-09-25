@@ -38,7 +38,7 @@ interface DashboardViewProps {
   onOpenCustomer360: (c: Customer) => void;
   onOpenRenew: (c: Customer) => void;
   onOpenSettings: () => void;
-  onNavigateTab: (tabId: 'dashboard' | 'customers' | 'meals' | 'expenses' | 'workers' | 'reports') => void;
+  onNavigateTab: (tabId: 'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports') => void;
   onApproveLeave?: (customerId: string, leaveId: string, days: number) => void;
   onRejectLeave?: (customerId: string, leaveId: string) => void;
   onCreateTestLeave?: () => void;
@@ -425,7 +425,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Financial Overview (Hidden for staff role) */}
       {currentRole !== 'staff' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
+          <div 
+            onClick={() => onNavigateTab('payments')}
+            className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-orange-300 transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-600">Total Subscription Inflow</span>
               <CreditCard className="w-4 h-4 text-orange-600" />
@@ -433,10 +436,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="text-2xl font-black text-slate-900">
               ₹{totalCollected.toLocaleString()}
             </div>
-            <p className="text-[11px] text-slate-400">Total membership payments & renewals recorded</p>
+            <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+              <span>Recorded payments</span>
+              <span className="text-orange-600 font-bold">Ledger ➔</span>
+            </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
+          <div 
+            onClick={() => onNavigateTab('payments')}
+            className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2 hover:border-rose-300 transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-600">Pending Fees / Dues</span>
               <AlertTriangle className="w-4 h-4 text-rose-500" />
@@ -444,7 +453,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className={`text-2xl font-black ${pendingBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
               ₹{pendingBalance.toLocaleString()}
             </div>
-            <p className="text-[11px] text-slate-400">Uncollected fees across registered members</p>
+            <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+              <span>Uncollected dues</span>
+              <span className="text-rose-600 font-bold">Collect ➔</span>
+            </div>
           </div>
 
           <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">

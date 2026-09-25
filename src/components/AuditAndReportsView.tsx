@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, Expense, TrialVisitor, Worker } from '../types/mess';
 import { calculateDaysRemaining, getTodayString } from '../lib/storage';
+import { exportToSpreadsheet } from '../lib/exportUtils';
 import { 
   TrendingUp, 
   AlertCircle, 
@@ -16,7 +17,9 @@ import {
   Clock,
   Phone,
   ShieldCheck,
-  XCircle
+  XCircle,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 
 interface AuditAndReportsViewProps {
@@ -139,6 +142,90 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
     setTrialNotes('');
   };
 
+  const handleExportTabToExcel = () => {
+    const todayStr = getTodayString();
+    if (activeTab === 'pnl') {
+      const pnlData = [
+        { 'Metric Category': 'REVENUE', 'Metric Name': 'Subscription Inflow', 'Amount (INR)': totalRevenue },
+        { 'Metric Category': 'REVENUE', 'Metric Name': 'Trial Diners Inflow', 'Amount (INR)': trialRevenue },
+        { 'Metric Category': 'REVENUE', 'Metric Name': 'Gross Revenue Inflow', 'Amount (INR)': totalGrossInflow },
+        { 'Metric Category': 'EXPENSE', 'Metric Name': 'Operating Kitchen Expenses', 'Amount (INR)': totalExpenses },
+        { 'Metric Category': 'PROFIT', 'Metric Name': 'Net Operating Profit', 'Amount (INR)': netProfit },
+        { 'Metric Category': 'RECEIVABLE', 'Metric Name': 'Pending Member Fees', 'Amount (INR)': pendingReceivables }
+      ];
+      exportToSpreadsheet(pnlData, {
+        filename: `Morya_Mess_PnL_Statement_${todayStr}`,
+        sheetName: 'PnL_Statement',
+        format: 'xlsx'
+      });
+    } else if (activeTab === 'expiry_watch') {
+      const listToExport = [...expiredCustomers, ...expiringSoonCustomers, ...penaltyUnpaidCustomers];
+      if (listToExport.length === 0) {
+        alert('No records available for the selected expiry filter.');
+        return;
+      }
+      const custData = listToExport.map(c => ({
+        'Customer ID': c.id,
+        'Name': c.name,
+        'Phone': c.phone,
+        'College / Hostel': c.college || c.collegeOrWork || c.hostel || c.hostelOrAddress || 'Hostel',
+        'Plan': (c.planType || 'Monthly').replace(/_/g, ' ').toUpperCase(),
+        'End Date': c.endDate,
+        'Days Remaining': calculateDaysRemaining(c.endDate),
+        'Balance Due (INR)': c.balance,
+        'Unpaid Penalty (INR)': c.penaltyAmount || 0,
+        'Status': (c.status || 'active').toUpperCase()
+      }));
+      exportToSpreadsheet(custData, {
+        filename: `Morya_Mess_Customers_Watchlist_${todayStr}`,
+        sheetName: 'Customer_Report',
+        format: 'xlsx'
+      });
+    } else if (activeTab === 'trials') {
+      if (trials.length === 0) {
+        alert('No trial diner records available to export.');
+        return;
+      }
+      const trialData = trials.map(t => ({
+        'Trial ID': t.id,
+        'Name': t.name,
+        'Phone': t.phone,
+        'College': t.college,
+        'Visit Type': t.visitType,
+        'Fee Paid (INR)': t.amountPaid,
+        'Date': t.date,
+        'Converted to Monthly': t.convertedToMonthly ? 'YES' : 'NO',
+        'Notes': t.notes || ''
+      }));
+      exportToSpreadsheet(trialData, {
+        filename: `Morya_Mess_Trial_Students_${todayStr}`,
+        sheetName: 'Trial_Students',
+        format: 'xlsx'
+      });
+    } else if (activeTab === 'leave_approvals') {
+      if (filteredLeaves.length === 0) {
+        alert('No leave records available for the selected filter.');
+        return;
+      }
+      const leaveData = filteredLeaves.map(l => ({
+        'Customer ID': l.customerId,
+        'Name': l.customerName,
+        'Phone': l.customerPhone,
+        'Start Date': l.startDate,
+        'End Date': l.endDate,
+        'Days': l.days,
+        'Reason': l.reason,
+        'Status': l.approved ? 'APPROVED' : 'PENDING',
+        'Auto-Extend Applied': l.autoExtendApplied ? 'YES' : 'NO'
+      }));
+      exportToSpreadsheet(leaveData, {
+        filename: `Morya_Mess_Student_Leaves_${todayStr}`,
+        sheetName: 'Leaves_Report',
+        format: 'xlsx'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
@@ -149,16 +236,26 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
             Monthly P&L, Card Expiry Fraud Prevention Watchlist & Trial Customer Conversions
           </p>
         </div>
-        {activeTab === 'trials' && (
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
-            id="btn-add-trial-visitor"
-            onClick={() => setIsAddTrialOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-orange-600 text-white text-xs font-bold hover:bg-orange-700 shadow-xs cursor-pointer self-start sm:self-auto"
+            onClick={handleExportTabToExcel}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+            title="Export this report to Excel"
           >
-            <Plus className="w-4 h-4" />
-            <span>Record Trial Visitor (1 or 2 Days)</span>
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Export Excel</span>
           </button>
-        )}
+          {activeTab === 'trials' && (
+            <button
+              id="btn-add-trial-visitor"
+              onClick={() => setIsAddTrialOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-orange-600 text-white text-xs font-bold hover:bg-orange-700 shadow-xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Record Trial Visitor (1 or 2 Days)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

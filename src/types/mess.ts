@@ -17,7 +17,8 @@ export type CustomerStatus =
   | 'on_leave' 
   | 'blocked' 
   | 'inactive'
-  | 'not_renewed';
+  | 'not_renewed'
+  | 'suspended';
 
 export type QrStatus = 'active' | 'revoked' | 'replaced' | 'expired' | 'invalid';
 
@@ -72,6 +73,8 @@ export interface LeaveRecord {
   approvedBy?: string;
   createdAt: string;
   autoExtendApplied?: boolean;
+  status?: 'pending' | 'approved' | 'rejected';
+  requestedAt?: string;
 }
 
 export interface PenaltyRecord {
@@ -91,8 +94,12 @@ export interface Customer {
   gender: Gender;
   hostelOrAddress?: string;
   collegeOrWork?: string;
+  college?: string;
+  hostel?: string;
+  roomNumber?: string;
   planType: string;
   mealPreference?: MealPreference;
+  mealType?: MealType | string;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
   totalAmount: number;
@@ -150,6 +157,8 @@ export interface MealLog {
   gender?: Gender;
   mealType: MealType;
   date: string; // YYYY-MM-DD
+  time?: string;
+  isManual?: boolean;
   timestamp: string; // ISO string
   scanStatus: ScanEligibility;
   reason: string;
@@ -174,7 +183,7 @@ export type ExpenseCategory =
 
 export interface Expense {
   id: string;
-  title: string;
+  title?: string;
   category: ExpenseCategory;
   amount: number;
   date: string; // YYYY-MM-DD
@@ -353,6 +362,8 @@ export interface BusinessRulesConfig {
   lostCardPenalty: number;
   allowDuplicateMeal: boolean;
   duplicateOverrideAllowed: boolean;
+  hallCapacity?: number;
+  strictShiftEnforcement?: boolean;
   // Leave & Expiry rules
   leaveExtendsSubscription: boolean;
   maxLeaveDaysPerMonth: number;
@@ -419,7 +430,7 @@ export interface OwnerNotification {
 // FEATURE 4: Financial Transactions & Payments
 // ==========================================
 export type PaymentMode = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'adjustment';
-export type PaymentStatus = 'pending' | 'verified' | 'reversed' | 'failed';
+export type PaymentStatus = 'pending' | 'verified' | 'reversed' | 'failed' | 'rejected';
 
 export interface SupabasePaymentRecord {
   id: string;
@@ -520,4 +531,101 @@ export type OwnerNavPage =
   | 'my_account'
   | 'help_support'
   | 'support_requests';
+
+// ==========================================
+// Walk-in POS, Engagement & Menu Types
+// ==========================================
+export interface WalkinMealType {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+  isActive: boolean;
+}
+
+export interface WalkinPOSToken {
+  id: string;
+  tokenNumber: number;
+  guestName: string;
+  guestPhone?: string;
+  mealTypeId: string;
+  mealTypeName: string;
+  quantity: number;
+  ratePerMeal: number;
+  totalAmount: number;
+  paymentMode: 'cash' | 'upi';
+  utrReference?: string;
+  recordedBy: string;
+  status: 'paid' | 'cancelled';
+  createdAt: string;
+}
+
+export interface DayMenuDetail {
+  lunchSpecial: string;
+  lunchDal: string;
+  lunchRoti: string;
+  lunchRice: string;
+  lunchSweet?: string;
+  dinnerSpecial: string;
+  dinnerDal: string;
+  dinnerRoti: string;
+  dinnerRice: string;
+  dinnerSweet?: string;
+}
+
+export type WeeklyMenuSchedule = Record<'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday', DayMenuDetail>;
+
+export interface StudentPoll {
+  id: string;
+  question: string;
+  options: { id: string; text: string; votes: number }[];
+  totalVotes: number;
+  status: 'active' | 'closed';
+  createdAt: string;
+  expiresAt?: string;
+}
+
+export interface MessReminderNotice {
+  id: string;
+  title: string;
+  message: string;
+  priority: 'low' | 'normal' | 'urgent';
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface MealRatingReview {
+  id: string;
+  customerId: string;
+  customerName: string;
+  rating: number; // 1-5
+  feedback: string;
+  mealShift: 'lunch' | 'dinner' | 'breakfast';
+  date: string;
+  createdAt: string;
+}
+
+export interface CustomerComplaint {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  category: 'Food Quality' | 'Cleanliness' | 'Staff Behavior' | 'Quantity' | 'Other';
+  description: string;
+  status: 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  ownerReply?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  subject: string;
+  category: 'Technical' | 'Billing' | 'Feature Request' | 'Account';
+  message: string;
+  priority: 'normal' | 'high' | 'urgent';
+  status: 'OPEN' | 'IN_REVIEW' | 'RESOLVED';
+  createdAt: string;
+  response?: string;
+}
 

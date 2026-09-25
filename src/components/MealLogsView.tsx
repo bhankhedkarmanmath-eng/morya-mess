@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MealLog, MealType } from '../types/mess';
 import { getTodayString } from '../lib/storage';
+import { exportToSpreadsheet } from '../lib/exportUtils';
 import { 
   Utensils, 
   CheckCircle2, 
@@ -50,30 +51,27 @@ export const MealLogsView: React.FC<MealLogsViewProps> = ({
   const reviewScans = filteredLogs.filter(l => l.scanStatus === 'REVIEW_REQUIRED').length;
 
   const exportToCSV = () => {
-    if (mealLogs.length === 0) {
-      alert('No attendance data to export.');
+    if (filteredLogs.length === 0) {
+      alert('No data available for the selected filters.');
       return;
     }
-    const headers = ['Date', 'Time', 'Customer ID', 'Customer Name', 'Meal Type', 'Scan Status', 'Audit Reason', 'Notes'];
-    const rows = filteredLogs.map(l => [
-      l.date,
-      new Date(l.timestamp).toLocaleTimeString(),
-      l.customerId,
-      `"${l.customerName.replace(/"/g, '""')}"`,
-      l.mealType,
-      l.scanStatus,
-      `"${l.reason.replace(/"/g, '""')}"`,
-      `"${(l.overrideNotes || '').replace(/"/g, '""')}"`
-    ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `morya_mess_attendance_${selectedDate || 'all'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const data = filteredLogs.map(l => ({
+      'Date': l.date,
+      'Time': new Date(l.timestamp).toLocaleTimeString(),
+      'Customer ID': l.customerId,
+      'Customer Name': l.customerName,
+      'Meal Type': l.mealType.toUpperCase(),
+      'Scan Status': l.scanStatus,
+      'Audit Reason': l.reason,
+      'Notes': l.overrideNotes || ''
+    }));
+
+    exportToSpreadsheet(data, {
+      filename: `Morya_Mess_Attendance_${selectedDate || 'all'}`,
+      sheetName: 'Attendance_Logs',
+      format: 'xlsx'
+    });
   };
 
   return (
