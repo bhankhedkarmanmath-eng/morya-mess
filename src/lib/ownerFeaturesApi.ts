@@ -7,8 +7,26 @@ import {
   PaymentStatus, 
   TrialStudent, 
   TrialStatus,
-  Customer 
+  Customer,
+  MealLog,
+  WeeklyMenuSchedule,
+  StudentPoll,
+  MealRatingReview,
+  CustomerComplaint,
+  MessReminderNotice 
 } from '../types/mess';
+import { 
+  loadWeeklyMenu, 
+  saveWeeklyMenu,
+  loadPolls,
+  savePolls,
+  loadMealRatings,
+  saveMealRatings,
+  loadComplaints,
+  saveComplaints,
+  loadReminders,
+  saveReminders 
+} from './ownerModulesStorage';
 import { loadCustomers, saveCustomers } from './storage';
 
 export const DEFAULT_MESS_ID = '63b00e12-a702-492f-bd56-1e260338699f';
@@ -1386,3 +1404,578 @@ export async function saveMessUpiConfig(
     return { success: false, error: err?.message || 'Failed to save UPI config' };
   }
 }
+
+// ==========================================
+// BATCH 1: Student Portal & Cross-Sync Functions
+// ==========================================
+
+export async function fetchStudentLeaveRequests(customerId: string): Promise<any[]> {
+  if (!supabase || !customerId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .select('id, customer_id, mess_id, start_date, end_date, reason, status, created_at')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+    return data.map((r: any) => ({
+      id: r.id,
+      customerId: r.customer_id,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      reason: r.reason || 'General Leave',
+      status: r.status,
+      approved: r.status === 'approved',
+      days: Math.max(1, Math.ceil((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1),
+      createdAt: r.created_at
+    }));
+  } catch (e) {
+    console.warn('fetchStudentLeaveRequests err:', e);
+    return [];
+  }
+}
+
+export async function submitStudentLeaveRequest(params: {
+  customerId: string;
+  messId?: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}): Promise<{ success: boolean; data?: any; error?: string }> {
+  if (!supabase || !params.customerId) {
+    return { success: false, error: 'Database unavailable' };
+  }
+  try {
+    const targetMessId = params.messId || DEFAULT_MESS_ID;
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .insert({
+        customer_id: params.customerId,
+        mess_id: targetMessId,
+        start_date: params.startDate,
+        end_date: params.endDate,
+        reason: params.reason,
+        status: 'pending'
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('submitStudentLeaveRequest error:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_leave_updated'));
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to submit leave request' };
+  }
+}
+
+export async function fetchStudentAttendanceLogs(customerId: string): Promise<MealLog[]> {
+  if (!supabase || !customerId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('attendance_logs')
+      .select('id, customer_id, meal_date, meal_shift, is_valid, scan_mode, scanned_at, override_reason, device_info')
+      .eq('customer_id', customerId)
+      .order('scanned_at', { ascending: false })
+      .limit(100);
+
+    if (error || !data) return [];
+    return data.map((row: any) => ({
+      id: row.id,
+      customerId: row.customer_id,
+      customerName: 'Student',
+      date: row.meal_date || (row.scanned_at ? row.scanned_at.split('T')[0] : ''),
+      mealType: row.meal_shift === 'dinner' ? 'dinner' : 'lunch',
+      timestamp: row.scanned_at || new Date().toISOString(),
+      scanStatus: row.is_valid ? 'ALLOW' : 'BLOCK',
+      reason: row.override_reason || (row.is_valid ? 'Verified Entry' : 'Blocked / Shift Closed'),
+      overrideNotes: row.device_info || row.scan_mode || ''
+    }));
+  } catch (e) {
+    console.warn('fetchStudentAttendanceLogs error:', e);
+    return [];
+  }
+}
+
+export async function fetchWeeklyMenuFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<WeeklyMenuSchedule> {
+  const local = loadWeeklyMenu();
+  if (!supabase) return local;
+  try {
+    const { data } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    if (data?.notes) {
+      const parsed = JSON.parse(data.notes);
+      if (parsed.weeklyMenu) {
+        saveWeeklyMenu(parsed.weeklyMenu);
+        return parsed.weeklyMenu;
+      }
+    }
+  } catch (e) {
+    console.warn('fetchWeeklyMenuFromSupabase err:', e);
+  }
+  return local;
+}
+
+export async function saveWeeklyMenuToSupabase(
+  menu: WeeklyMenuSchedule,
+  messId: string = DEFAULT_MESS_ID
+): Promise<{ success: boolean; error?: string }> {
+  saveWeeklyMenu(menu);
+  if (!supabase) return { success: true };
+  try {
+    const { data: existing } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    let combinedNotes: Record<string, any> = {};
+    if (existing?.notes) {
+      try {
+        combinedNotes = JSON.parse(existing.notes);
+      } catch {
+        combinedNotes = { previous_notes: existing.notes };
+      }
+    }
+    combinedNotes.weeklyMenu = menu;
+    combinedNotes.updated_at = new Date().toISOString();
+
+    await supabase
+      .from('mess_settings')
+      .update({ notes: JSON.stringify(combinedNotes) })
+      .eq('mess_id', messId);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_menu_updated'));
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+export async function fetchStudentNotifications(customerId: string): Promise<any[]> {
+  if (!supabase || !customerId) return [];
+  try {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .or(`customer_id.eq.${customerId},customer_id.is.null`)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function markNotificationRead(notificationId: string): Promise<boolean> {
+  if (!supabase || !notificationId) return true;
+  try {
+    await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('id', notificationId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// FEATURE 11: Polls Cloud Sync & Anti-Duplicate Voting
+// ----------------------------------------------------
+export async function fetchPollsFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<{
+  polls: StudentPoll[];
+  pollVotes: Record<string, Record<string, string>>; // pollId -> customerId -> optionId
+}> {
+  const local = loadPolls();
+  let pollVotes: Record<string, Record<string, string>> = {};
+  try {
+    const rawVotes = localStorage.getItem('morya_v3_poll_votes');
+    if (rawVotes) pollVotes = JSON.parse(rawVotes);
+  } catch {}
+
+  if (!supabase) return { polls: local, pollVotes };
+  try {
+    const { data } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    if (data?.notes) {
+      const parsed = JSON.parse(data.notes);
+      if (parsed.polls) {
+        savePolls(parsed.polls);
+        if (parsed.pollVotes) {
+          pollVotes = { ...pollVotes, ...parsed.pollVotes };
+          localStorage.setItem('morya_v3_poll_votes', JSON.stringify(pollVotes));
+        }
+        return { polls: parsed.polls, pollVotes };
+      }
+    }
+  } catch (e) {
+    console.warn('fetchPollsFromSupabase err:', e);
+  }
+  return { polls: local, pollVotes };
+}
+
+export async function submitStudentVote(
+  pollId: string,
+  optionId: string,
+  customerId: string,
+  messId: string = DEFAULT_MESS_ID
+): Promise<{ success: boolean; error?: string; polls?: StudentPoll[] }> {
+  if (!pollId || !optionId || !customerId) {
+    return { success: false, error: 'Invalid vote parameters' };
+  }
+
+  // Check if customer already voted
+  let pollVotes: Record<string, Record<string, string>> = {};
+  try {
+    const raw = localStorage.getItem('morya_v3_poll_votes');
+    if (raw) pollVotes = JSON.parse(raw);
+  } catch {}
+
+  if (pollVotes[pollId] && pollVotes[pollId][customerId]) {
+    return { success: false, error: 'You have already voted on this poll.' };
+  }
+
+  const currentPolls = loadPolls();
+  const pollIndex = currentPolls.findIndex(p => p.id === pollId);
+  if (pollIndex === -1) {
+    return { success: false, error: 'Poll not found' };
+  }
+
+  const poll = currentPolls[pollIndex];
+  if (poll.status === 'closed') {
+    return { success: false, error: 'This poll is already closed.' };
+  }
+
+  // Update option tally
+  const updatedOptions = poll.options.map(opt => 
+    opt.id === optionId ? { ...opt, votes: (opt.votes || 0) + 1 } : opt
+  );
+  const updatedPoll: StudentPoll = {
+    ...poll,
+    totalVotes: (poll.totalVotes || 0) + 1,
+    options: updatedOptions
+  };
+
+  const updatedPolls = [...currentPolls];
+  updatedPolls[pollIndex] = updatedPoll;
+
+  // Save locally
+  savePolls(updatedPolls);
+
+  // Record customer vote
+  if (!pollVotes[pollId]) pollVotes[pollId] = {};
+  pollVotes[pollId][customerId] = optionId;
+  localStorage.setItem('morya_v3_poll_votes', JSON.stringify(pollVotes));
+
+  // Sync to Supabase mess_settings
+  if (supabase) {
+    try {
+      const { data: existing } = await supabase
+        .from('mess_settings')
+        .select('notes')
+        .eq('mess_id', messId)
+        .maybeSingle();
+
+      let combined: Record<string, any> = {};
+      if (existing?.notes) {
+        try { combined = JSON.parse(existing.notes); } catch {}
+      }
+      combined.polls = updatedPolls;
+      combined.pollVotes = { ...(combined.pollVotes || {}), ...pollVotes };
+      combined.updated_at = new Date().toISOString();
+
+      await supabase
+        .from('mess_settings')
+        .update({ notes: JSON.stringify(combined) })
+        .eq('mess_id', messId);
+    } catch (e) {
+      console.warn('Sync vote to Supabase non-blocking note:', e);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('morya_polls_updated'));
+  }
+
+  return { success: true, polls: updatedPolls };
+}
+
+// ----------------------------------------------------
+// FEATURE 12: Meal Ratings & Reviews Cloud Sync
+// ----------------------------------------------------
+export async function fetchMealRatingsFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<MealRatingReview[]> {
+  const local = loadMealRatings();
+  if (!supabase) return local;
+  try {
+    const { data } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    if (data?.notes) {
+      const parsed = JSON.parse(data.notes);
+      if (parsed.mealRatings && Array.isArray(parsed.mealRatings)) {
+        saveMealRatings(parsed.mealRatings);
+        return parsed.mealRatings;
+      }
+    }
+  } catch (e) {
+    console.warn('fetchMealRatingsFromSupabase err:', e);
+  }
+  return local;
+}
+
+export async function submitMealRating(
+  ratingData: Omit<MealRatingReview, 'id' | 'createdAt'>,
+  messId: string = DEFAULT_MESS_ID
+): Promise<{ success: boolean; error?: string; rating?: MealRatingReview }> {
+  if (!ratingData.customerId || !ratingData.rating) {
+    return { success: false, error: 'Rating score is required.' };
+  }
+
+  const existingRatings = loadMealRatings();
+
+  // Prevent duplicate rating for same customer, date, and meal shift
+  const duplicate = existingRatings.find(
+    r => r.customerId === ratingData.customerId && 
+         r.date === ratingData.date && 
+         r.mealShift === ratingData.mealShift
+  );
+  if (duplicate) {
+    return { 
+      success: false, 
+      error: `You have already submitted a review for ${ratingData.mealShift} today (${ratingData.date}).` 
+    };
+  }
+
+  const newRating: MealRatingReview = {
+    ...ratingData,
+    id: `rate-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    createdAt: new Date().toISOString()
+  };
+
+  const updatedRatings = [newRating, ...existingRatings];
+  saveMealRatings(updatedRatings);
+
+  if (supabase) {
+    try {
+      const { data: existing } = await supabase
+        .from('mess_settings')
+        .select('notes')
+        .eq('mess_id', messId)
+        .maybeSingle();
+
+      let combined: Record<string, any> = {};
+      if (existing?.notes) {
+        try { combined = JSON.parse(existing.notes); } catch {}
+      }
+      combined.mealRatings = updatedRatings;
+      combined.updated_at = new Date().toISOString();
+
+      await supabase
+        .from('mess_settings')
+        .update({ notes: JSON.stringify(combined) })
+        .eq('mess_id', messId);
+    } catch (e) {
+      console.warn('Sync rating to Supabase non-blocking note:', e);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('morya_ratings_updated'));
+  }
+
+  return { success: true, rating: newRating };
+}
+
+// ----------------------------------------------------
+// FEATURE 14: Announcements & Notices Cloud Sync
+// ----------------------------------------------------
+export async function fetchAnnouncementsFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<MessReminderNotice[]> {
+  const local = loadReminders();
+  if (!supabase) return local;
+  try {
+    const { data } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    if (data?.notes) {
+      const parsed = JSON.parse(data.notes);
+      if (parsed.reminders && Array.isArray(parsed.reminders)) {
+        saveReminders(parsed.reminders);
+        return parsed.reminders;
+      }
+    }
+  } catch (e) {
+    console.warn('fetchAnnouncementsFromSupabase err:', e);
+  }
+  return local;
+}
+
+// ----------------------------------------------------
+// FEATURE 15: Complaints & Support Cloud Sync
+// ----------------------------------------------------
+export async function fetchComplaintsFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<CustomerComplaint[]> {
+  const local = loadComplaints();
+  if (!supabase) return local;
+  try {
+    const { data } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    if (data?.notes) {
+      const parsed = JSON.parse(data.notes);
+      if (parsed.complaints && Array.isArray(parsed.complaints)) {
+        saveComplaints(parsed.complaints);
+        return parsed.complaints;
+      }
+    }
+  } catch (e) {
+    console.warn('fetchComplaintsFromSupabase err:', e);
+  }
+  return local;
+}
+
+export async function submitStudentComplaint(
+  complaintData: Omit<CustomerComplaint, 'id' | 'createdAt' | 'status'>,
+  messId: string = DEFAULT_MESS_ID
+): Promise<{ success: boolean; error?: string; complaint?: CustomerComplaint }> {
+  if (!complaintData.description || !complaintData.customerId) {
+    return { success: false, error: 'Please enter a description for your complaint.' };
+  }
+
+  const existingComplaints = loadComplaints();
+  const newComplaint: CustomerComplaint = {
+    ...complaintData,
+    id: `comp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    status: 'NEW',
+    createdAt: new Date().toISOString()
+  };
+
+  const updatedComplaints = [newComplaint, ...existingComplaints];
+  saveComplaints(updatedComplaints);
+
+  if (supabase) {
+    try {
+      const { data: existing } = await supabase
+        .from('mess_settings')
+        .select('notes')
+        .eq('mess_id', messId)
+        .maybeSingle();
+
+      let combined: Record<string, any> = {};
+      if (existing?.notes) {
+        try { combined = JSON.parse(existing.notes); } catch {}
+      }
+      combined.complaints = updatedComplaints;
+      combined.updated_at = new Date().toISOString();
+
+      await supabase
+        .from('mess_settings')
+        .update({ notes: JSON.stringify(combined) })
+        .eq('mess_id', messId);
+
+      // Also record notification for Owner
+      await supabase.from('notifications').insert({
+        mess_id: messId,
+        type: 'complaint',
+        title: `New Student Complaint (${complaintData.category})`,
+        message: `${complaintData.customerName}: ${complaintData.description.slice(0, 80)}...`,
+        customer_id: complaintData.customerId,
+        customer_name: complaintData.customerName,
+        priority: 'high',
+        is_read: false
+      });
+    } catch (e) {
+      console.warn('Sync complaint to Supabase non-blocking note:', e);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('morya_complaints_updated'));
+  }
+
+  return { success: true, complaint: newComplaint };
+}
+
+// ----------------------------------------------------
+// FEATURE 18: Update Permitted Student Profile Fields
+// ----------------------------------------------------
+export async function updateStudentProfileInSupabase(
+  customerId: string,
+  updates: {
+    phone?: string;
+    collegeOrWork?: string;
+    hostelOrAddress?: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  if (!customerId) return { success: false, error: 'Customer ID is missing.' };
+
+  // 1. Update in local storage
+  const customers = loadCustomers();
+  const index = customers.findIndex(c => c.id === customerId);
+  if (index !== -1) {
+    customers[index] = {
+      ...customers[index],
+      phone: updates.phone ?? customers[index].phone,
+      collegeOrWork: updates.collegeOrWork ?? customers[index].collegeOrWork,
+      hostelOrAddress: updates.hostelOrAddress ?? customers[index].hostelOrAddress,
+      updatedAt: new Date().toISOString()
+    };
+    saveCustomers(customers);
+  }
+
+  // 2. Update in Supabase public.customers table (protected fields are untouched!)
+  if (supabase) {
+    try {
+      const dbUpdates: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.collegeOrWork !== undefined) dbUpdates.college_name = updates.collegeOrWork;
+      if (updates.hostelOrAddress !== undefined) dbUpdates.hostel_name = updates.hostelOrAddress;
+
+      const { error } = await supabase
+        .from('customers')
+        .update(dbUpdates)
+        .eq('id', customerId);
+
+      if (error) {
+        console.warn('Supabase customer update error:', error);
+        return { success: false, error: error.message };
+      }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Database update failed' };
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  return { success: true };
+}
+
+

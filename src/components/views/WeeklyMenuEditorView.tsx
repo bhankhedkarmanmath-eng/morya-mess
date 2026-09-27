@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { WeeklyMenuSchedule, DayMenuDetail } from '../../types/mess';
 import { loadWeeklyMenu, saveWeeklyMenu } from '../../lib/ownerModulesStorage';
+import { fetchWeeklyMenuFromSupabase, saveWeeklyMenuToSupabase } from '../../lib/ownerFeaturesApi';
 import { 
   Utensils, 
   ArrowLeft, 
@@ -31,6 +32,12 @@ export const WeeklyMenuEditorView: React.FC<WeeklyMenuEditorViewProps> = ({ onBa
   const [activeDay, setActiveDay] = useState<keyof WeeklyMenuSchedule>('monday');
   const [isSaved, setIsSaved] = useState(false);
 
+  useEffect(() => {
+    fetchWeeklyMenuFromSupabase().then(m => {
+      if (m) setMenu(m);
+    });
+  }, []);
+
   const activeDayDetail = menu[activeDay] || {
     lunchSpecial: '', lunchDal: '', lunchRoti: '', lunchRice: '', lunchSweet: '',
     dinnerSpecial: '', dinnerDal: '', dinnerRoti: '', dinnerRice: '', dinnerSweet: ''
@@ -47,12 +54,14 @@ export const WeeklyMenuEditorView: React.FC<WeeklyMenuEditorViewProps> = ({ onBa
     setIsSaved(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     saveWeeklyMenu(menu);
+    await saveWeeklyMenuToSupabase(menu);
     setIsSaved(true);
     // Broadcast event so Student Portal and counters update
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('morya_menu_updated'));
     }
     setTimeout(() => setIsSaved(false), 3000);
   };

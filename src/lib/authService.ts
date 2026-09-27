@@ -347,3 +347,66 @@ export async function performSignOut(): Promise<void> {
     }
   }
 }
+
+/**
+ * Change Student Password (Feature 20)
+ */
+export async function changeStudentPassword(
+  customerId: string,
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!customerId) {
+    return { success: false, error: 'Student session not found. Please log in again.' };
+  }
+  if (!currentPassword) {
+    return { success: false, error: 'Please enter your current password.' };
+  }
+  if (!newPassword || newPassword.length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters long.' };
+  }
+  if (newPassword === TEMPORARY_PASSWORD) {
+    return { success: false, error: 'New password cannot be the default temporary password (112233).' };
+  }
+  if (newPassword !== confirmPassword) {
+    return { success: false, error: 'New password and confirmation do not match.' };
+  }
+
+  const credentials = loadStoredCredentials();
+  const studentKey = `student_${customerId.toLowerCase()}`;
+  const existingRecord = credentials[studentKey];
+
+  // Verify current password
+  if (existingRecord && existingRecord.passwordHash) {
+    const inputHash = await hashPassword(currentPassword);
+    if (inputHash !== existingRecord.passwordHash) {
+      return { success: false, error: 'Incorrect current password.' };
+    }
+  } else if (currentPassword !== TEMPORARY_PASSWORD) {
+    return { success: false, error: 'Incorrect current password. If this is your first time, use 112233.' };
+  }
+
+  // Hash new password
+  const newHash = await hashPassword(newPassword);
+  credentials[studentKey] = {
+    id: customerId,
+    identifier: customerId,
+    passwordHash: newHash,
+    role: 'student',
+    name: existingRecord?.name || 'Student',
+    mustChangePassword: false,
+    updatedAt: new Date().toISOString()
+  };
+  saveStoredCredentials(credentials);
+
+  // Sync to Supabase completeFirstTimePasswordReset if available
+  try {
+    await completeFirstTimePasswordReset(customerId, newPassword);
+  } catch (e) {
+    console.warn('Supabase password reset sync non-blocking note:', e);
+  }
+
+  return { success: true };
+}
+
