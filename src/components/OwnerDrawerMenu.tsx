@@ -25,7 +25,8 @@ import {
   FileText,
   Clock,
   LogOut,
-  Smartphone
+  Smartphone,
+  Package
 } from 'lucide-react';
 
 interface OwnerDrawerMenuProps {
@@ -119,7 +120,8 @@ export const OwnerDrawerMenu: React.FC<OwnerDrawerMenuProps> = ({
         { id: 'walkin_pos', label: 'Walk-in POS', icon: DollarSign },
         { id: 'walkin_meal_types', label: 'Walk-in Meal Types', icon: Utensils },
         { id: 'walkin_payments', label: 'Walk-in Payments', icon: CreditCard },
-        { id: 'expense_tracker', label: 'Expense Tracker', icon: Receipt }
+        { id: 'expense_tracker', label: 'Expense Tracker', icon: Receipt },
+        { id: 'inventory', label: 'Inventory & Stock Control', icon: Package }
       ]
     },
     {

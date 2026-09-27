@@ -96,14 +96,14 @@ export const BillingOverviewView: React.FC<BillingOverviewViewProps> = ({
       </div>
 
       {/* Financial KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Verified Inflow</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Verified Inflow</span>
             <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-black text-slate-900">₹{totalInflow.toLocaleString()}</div>
-          <div className="text-[11px] text-slate-400 font-medium">All recorded student subscriptions</div>
+          <div className="text-[11px] text-slate-400 font-medium">All verified subscriptions</div>
         </div>
 
         <div 
@@ -150,6 +150,23 @@ export const BillingOverviewView: React.FC<BillingOverviewViewProps> = ({
           <div className="text-[11px] text-amber-700 font-bold flex items-center justify-between">
             <span>Review submitted UTRs</span>
             <span>Verify ➔</span>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => onNavigateSubModule('customer_ledger')}
+          className="bg-white p-5 rounded-2xl border border-rose-200 shadow-2xs space-y-1 bg-rose-50/30 hover:border-rose-400 transition cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">Outstanding Dues</span>
+            <AlertTriangle className="w-4 h-4 text-rose-600" />
+          </div>
+          <div className="text-2xl font-black text-rose-800">
+            ₹{totalOutstandingDues.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-rose-700 font-bold flex items-center justify-between">
+            <span>Member ledger balances</span>
+            <span>Ledger ➔</span>
           </div>
         </div>
       </div>
@@ -291,14 +308,26 @@ export const BillingOverviewView: React.FC<BillingOverviewViewProps> = ({
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <div className="font-black text-slate-900 text-sm">₹{p.amount}</div>
-                  <span className={`text-[10px] font-bold uppercase ${
-                    p.status === 'verified' ? 'text-emerald-600' :
-                    p.status === 'pending' ? 'text-amber-600' : 'text-rose-600'
-                  }`}>
-                    {p.status}
-                  </span>
+                <div className="text-right flex items-center gap-3">
+                  <div>
+                    <div className="font-black text-slate-900 text-sm">₹{p.amount}</div>
+                    <span className={`text-[10px] font-bold uppercase ${
+                      p.status === 'verified' ? 'text-emerald-600' :
+                      p.status === 'pending' ? 'text-amber-600' : 'text-rose-600'
+                    }`}>
+                      {p.status}
+                    </span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateSubModule('payment_history');
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-orange-50 hover:text-orange-600 text-slate-500 cursor-pointer"
+                    title="View in Payment History & Print Voucher"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))}

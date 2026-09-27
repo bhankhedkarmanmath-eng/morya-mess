@@ -22,6 +22,7 @@ interface LoginScreenProps {
   onAuthenticated: (user: AuthenticatedUser) => void;
   allCustomers: Customer[];
   messName?: string;
+  sessionExpiredNotice?: string | null;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
@@ -30,7 +31,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onRequirePasswordReset,
   onAuthenticated,
   allCustomers,
-  messName = 'MORYA MESS'
+  messName = 'MORYA MESS',
+  sessionExpiredNotice
 }) => {
   const isOwner = portal === 'owner';
   const [identifier, setIdentifier] = useState(isOwner ? 'bhankhedkarmanmath3@gmail.com' : '');
@@ -139,6 +141,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </p>
             </div>
           </div>
+
+          {/* Session Expired Banner */}
+          {sessionExpiredNotice && (
+            <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-2.5 text-xs text-amber-950 font-medium">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-900">Session Notice</p>
+                <p className="text-[11px] text-amber-800 mt-0.5">{sessionExpiredNotice}</p>
+              </div>
+            </div>
+          )}
 
           {/* First-time login banner info */}
           <div className="mt-5 p-3.5 rounded-xl bg-orange-50/80 border border-orange-200/80 flex items-start gap-2.5 text-xs text-orange-900">

@@ -61,6 +61,7 @@ import { TrialStudentsManagerView } from './components/TrialStudentsManagerView'
 
 // Dedicated Views for Owner App Modules
 import { AttendanceScannerScreen } from './components/views/AttendanceScannerScreen';
+import { AttendanceCenterView } from './components/views/AttendanceCenterView';
 import { BillingOverviewView } from './components/views/BillingOverviewView';
 import { CashPaymentsView } from './components/views/CashPaymentsView';
 import { ComplaintsTrackerView } from './components/views/ComplaintsTrackerView';
@@ -88,6 +89,7 @@ import { WalkinMealTypesView } from './components/views/WalkinMealTypesView';
 import { WalkinPOSView } from './components/views/WalkinPOSView';
 import { WalkinPaymentsView } from './components/views/WalkinPaymentsView';
 import { WeeklyMenuEditorView } from './components/views/WeeklyMenuEditorView';
+import { InventoryCenterView } from './components/views/InventoryCenterView';
 import { 
   fetchOwnerNotifications, 
   markNotificationAsRead, 
@@ -214,6 +216,8 @@ export function App() {
     }
   };
 
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null);
+
   // Check existing session on mount
   useEffect(() => {
     if (supabase) {
@@ -281,7 +285,26 @@ export function App() {
     }
   }, []);
 
-  // Secure logout handler
+  // Secure Student logout handler (Feature 21)
+  const handleStudentLogout = async (sessionExpired: boolean = false) => {
+    await performSignOut();
+    setAuthenticatedUser(null);
+    setPendingResetUser(null);
+    setStudentPortalCustomer(null);
+    setCurrentPortal('owner');
+    setSelectedPortal('student');
+    if (sessionExpired) {
+      setSessionExpiredNotice('Your session has expired. Please sign in again.');
+    } else {
+      setSessionExpiredNotice(null);
+    }
+    setAuthState('LOGIN');
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  };
+
+  // Secure logout handler for Owner / General
   const handleLogout = async () => {
     await performSignOut();
     setAuthenticatedUser(null);
@@ -289,7 +312,24 @@ export function App() {
     setStudentPortalCustomer(null);
     setCurrentPortal('owner');
     setAuthState('PORTAL_CHOICE');
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
   };
+
+  // Feature 21: Browser back navigation protection for authenticated sessions
+  useEffect(() => {
+    if (authState === 'AUTHENTICATED' && typeof window !== 'undefined' && window.history) {
+      window.history.pushState(null, '', window.location.pathname);
+      const handlePopState = () => {
+        window.history.pushState(null, '', window.location.pathname);
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [authState]);
 
   // Real-time synchronization with Supabase on mount
   useEffect(() => {
@@ -787,6 +827,7 @@ export function App() {
           }}
           onAuthenticated={(user) => {
             setAuthenticatedUser(user);
+            setSessionExpiredNotice(null);
             if (user.role === 'student') {
               if (user.studentCustomer) {
                 setStudentPortalCustomer(user.studentCustomer);
@@ -800,6 +841,7 @@ export function App() {
           }}
           allCustomers={customers}
           messName={rules.messName}
+          sessionExpiredNotice={sessionExpiredNotice}
         />
       )}
 
@@ -834,7 +876,7 @@ export function App() {
             allCustomers={[studentPortalCustomer || authenticatedUser!.studentCustomer!]}
             mealLogs={mealLogs.filter(m => m.customerId === (studentPortalCustomer?.id || authenticatedUser?.studentCustomer?.id))}
             onSwitchCustomer={(c) => setStudentPortalCustomer(c)}
-            onExitPortal={handleLogout}
+            onExitPortal={() => handleStudentLogout(false)}
             onRequestLeave={handleRequestLeave}
             onMealLogged={(newLog) => {
               setMealLogs(prev => {
@@ -1067,6 +1109,10 @@ export function App() {
                 onDeleteExpense={handleDeleteExpense}
                 onBack={() => setActiveOwnerPage('dashboard')}
               />
+            ) : activeOwnerPage === 'inventory' ? (
+              <InventoryCenterView
+                onBack={() => setActiveOwnerPage('dashboard')}
+              />
             ) : activeOwnerPage === 'meal_plans_pricing' ? (
               <MealPlansPricingView
                 onBack={() => setActiveOwnerPage('dashboard')}
@@ -1154,10 +1200,21 @@ export function App() {
                 onDeleteCustomer={handleDeleteCustomer}
                 onClearAllCustomers={handleClearAllCustomers}
               />
-            ) : currentTab === 'meals' || (activeOwnerPage as any) === 'meals' ? (
-              <MealLogsView
+            ) : currentTab === 'meals' || (activeOwnerPage as any) === 'meals' || activeOwnerPage === 'attendance_reports' ? (
+              <AttendanceCenterView
                 mealLogs={mealLogs}
+                customers={customers}
                 onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
+                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
+                onRecordManualAttendance={(cid, shift, reason) => {
+                  handleRecordMeal(cid, 'ALLOW', reason || 'Counter Verified', shift || 'lunch');
+                  return { success: true, message: `Marked ${shift.toUpperCase()} meal for ${cid}` };
+                }}
+                onRefreshLogs={() => {
+                  // Reload meal logs
+                  const current = loadMealLogs();
+                  setMealLogs(current);
+                }}
               />
             ) : currentTab === 'expenses' ? (
               <ExpensesView

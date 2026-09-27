@@ -13,7 +13,11 @@ import {
   StudentPoll,
   MealRatingReview,
   CustomerComplaint,
-  MessReminderNotice 
+  MessReminderNotice,
+  InventoryItem,
+  InventoryMovement,
+  InventorySupplier,
+  ScanEligibility
 } from '../types/mess';
 import { 
   loadWeeklyMenu, 
@@ -25,7 +29,14 @@ import {
   loadComplaints,
   saveComplaints,
   loadReminders,
-  saveReminders 
+  saveReminders,
+  loadInventoryItems,
+  saveInventoryItems,
+  loadInventoryMovements,
+  saveInventoryMovements,
+  loadInventorySuppliers,
+  saveInventorySuppliers,
+  addSecurityLog
 } from './ownerModulesStorage';
 import { loadCustomers, saveCustomers } from './storage';
 
@@ -619,14 +630,38 @@ export async function fetchCustomer360Profile(
       createdAt: l.created_at
     }));
 
+    // 5. Complaints
+    const allComplaints = await fetchComplaintsFromSupabase(messId);
+    const complaints = (allComplaints || [])
+      .filter(c => c.customerId === customerId)
+      .map(c => ({
+        id: c.id,
+        subject: c.subject || c.category,
+        description: c.description,
+        status: c.status,
+        response: c.ownerReply,
+        createdAt: c.createdAt
+      }));
+
+    // 6. Reviews & Ratings
+    const allReviews = await fetchMealRatingsFromSupabase(messId);
+    const reviews = (allReviews || [])
+      .filter(r => r.customerId === customerId)
+      .map(r => ({
+        id: r.id,
+        rating: r.rating,
+        comment: r.feedback,
+        createdAt: r.createdAt
+      }));
+
     return {
       customer,
       payments,
       attendanceCount,
       attendanceLogs,
       leaveHistory,
-      complaints: [],
-      reviews: []
+      complaints,
+      reviews
     };
   } catch (err) {
     console.error('fetchCustomer360Profile error:', err);
@@ -1977,5 +2012,319 @@ export async function updateStudentProfileInSupabase(
 
   return { success: true };
 }
+
+// ----------------------------------------------------
+// FEATURE 24 & 28: Student Real-time Notifications Subscription
+// ----------------------------------------------------
+export function subscribeToStudentNotificationsRealtime(
+  customerId: string,
+  onNotification: (notif: any) => void
+): () => void {
+  if (!supabase || !customerId) return () => {};
+
+  try {
+    const channel = supabase
+      .channel(`student_notifs_${customerId}_${Date.now()}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications'
+        },
+        (payload) => {
+          const n = payload.new as any;
+          if (!n) return;
+          if (!n.customer_id || n.customer_id === customerId) {
+            onNotification(n);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase?.removeChannel(channel);
+      } catch {}
+    };
+  } catch (err) {
+    console.warn('subscribeToStudentNotificationsRealtime err:', err);
+    return () => {};
+  }
+}
+
+// ----------------------------------------------------
+// FEATURE 25: Attendance Dispute Reporting
+// ----------------------------------------------------
+export async function submitAttendanceDispute(params: {
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  mealLogId: string;
+  date: string;
+  mealType: string;
+  disputeReason: string;
+  notes?: string;
+  messId?: string;
+}): Promise<{ success: boolean; error?: string; complaint?: CustomerComplaint }> {
+  const fullDescription = `[Attendance Dispute - ${params.mealType.toUpperCase()} Meal on ${params.date}]\nIssue: ${params.disputeReason}${params.notes ? `\nStudent Notes: ${params.notes}` : ''}\nAuthoritative Record ID: ${params.mealLogId}`;
+
+  return submitStudentComplaint({
+    customerId: params.customerId,
+    customerName: params.customerName,
+    customerPhone: params.customerPhone,
+    category: 'Attendance Dispute',
+    subject: `Attendance Dispute: ${params.mealType.toUpperCase()} on ${params.date}`,
+    description: fullDescription
+  }, params.messId || DEFAULT_MESS_ID);
+}
+
+// ----------------------------------------------------
+// SECTION 6: Inventory Stock & Movement API
+// ----------------------------------------------------
+export async function fetchInventoryFromSupabase(messId: string = DEFAULT_MESS_ID): Promise<InventoryItem[]> {
+  const localItems = loadInventoryItems();
+  if (!supabase) return localItems;
+
+  try {
+    const { data, error } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    if (!error && data?.notes) {
+      try {
+        const parsed = JSON.parse(data.notes);
+        if (Array.isArray(parsed.inventoryItems) && parsed.inventoryItems.length > 0) {
+          saveInventoryItems(parsed.inventoryItems);
+          return parsed.inventoryItems;
+        }
+      } catch {}
+    }
+    return localItems;
+  } catch (err) {
+    console.warn('fetchInventoryFromSupabase err:', err);
+    return localItems;
+  }
+}
+
+export async function saveInventoryToSupabase(
+  items: InventoryItem[],
+  messId: string = DEFAULT_MESS_ID
+): Promise<{ success: boolean; error?: string }> {
+  saveInventoryItems(items);
+  if (!supabase) return { success: true };
+
+  try {
+    const { data: existing } = await supabase
+      .from('mess_settings')
+      .select('notes')
+      .eq('mess_id', messId)
+      .maybeSingle();
+
+    let combinedNotes: Record<string, any> = {};
+    if (existing?.notes) {
+      try {
+        combinedNotes = JSON.parse(existing.notes);
+      } catch {
+        combinedNotes = { previous_notes: existing.notes };
+      }
+    }
+
+    combinedNotes.inventoryItems = items;
+    combinedNotes.updated_at = new Date().toISOString();
+
+    const { error: updateErr } = await supabase
+      .from('mess_settings')
+      .update({
+        notes: JSON.stringify(combinedNotes)
+      })
+      .eq('mess_id', messId);
+
+    if (updateErr) {
+      console.warn('saveInventoryToSupabase warning:', updateErr.message);
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn('saveInventoryToSupabase error:', err);
+    return { success: true };
+  }
+}
+
+export async function recordStockPurchase(params: {
+  itemId: string;
+  quantity: number;
+  cost: number;
+  supplier: string;
+  invoiceNumber?: string;
+  notes?: string;
+  date: string;
+  recordedBy: string;
+  messId?: string;
+}): Promise<{ success: boolean; item?: InventoryItem; error?: string }> {
+  try {
+    const items = loadInventoryItems();
+    const targetItem = items.find(i => i.id === params.itemId);
+    if (!targetItem) {
+      return { success: false, error: 'Inventory item not found.' };
+    }
+
+    // 1. Update stock
+    targetItem.currentStock += Number(params.quantity);
+    targetItem.lastRestockedDate = params.date;
+    targetItem.lastUpdated = new Date().toISOString();
+    if (params.cost && params.quantity > 0) {
+      targetItem.costPerUnit = Math.round(params.cost / params.quantity);
+    }
+    if (params.supplier) {
+      targetItem.supplierName = params.supplier;
+    }
+
+    await saveInventoryToSupabase(items, params.messId);
+
+    // 2. Append movement
+    const movements = loadInventoryMovements();
+    const newMovement: InventoryMovement = {
+      id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      itemId: targetItem.id,
+      itemName: targetItem.name,
+      type: 'purchase',
+      quantity: Number(params.quantity),
+      unit: targetItem.unit,
+      cost: Number(params.cost),
+      supplier: params.supplier,
+      invoiceNumber: params.invoiceNumber,
+      reason: params.notes || 'Stock Restock / Purchase',
+      date: params.date,
+      recordedBy: params.recordedBy,
+      createdAt: new Date().toISOString()
+    };
+    saveInventoryMovements([newMovement, ...movements]);
+
+    // 3. Security audit log
+    addSecurityLog(
+      params.recordedBy,
+      'Inventory Restock Recorded',
+      'Inventory',
+      `Restocked ${params.quantity} ${targetItem.unit} of ${targetItem.name} from ${params.supplier} (Total: ₹${params.cost})`,
+      targetItem.id
+    );
+
+    return { success: true, item: targetItem };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to record purchase' };
+  }
+}
+
+export async function recordStockMovement(params: {
+  itemId: string;
+  type: 'consumption' | 'wastage' | 'adjustment';
+  quantity: number;
+  reason: string;
+  date: string;
+  recordedBy: string;
+  messId?: string;
+}): Promise<{ success: boolean; item?: InventoryItem; error?: string }> {
+  try {
+    const items = loadInventoryItems();
+    const targetItem = items.find(i => i.id === params.itemId);
+    if (!targetItem) {
+      return { success: false, error: 'Inventory item not found.' };
+    }
+
+    if (params.type === 'adjustment') {
+      targetItem.currentStock = Math.max(0, Number(params.quantity));
+    } else {
+      targetItem.currentStock = Math.max(0, targetItem.currentStock - Number(params.quantity));
+    }
+    targetItem.lastUpdated = new Date().toISOString();
+
+    await saveInventoryToSupabase(items, params.messId);
+
+    // Record movement
+    const movements = loadInventoryMovements();
+    const newMovement: InventoryMovement = {
+      id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      itemId: targetItem.id,
+      itemName: targetItem.name,
+      type: params.type,
+      quantity: Number(params.quantity),
+      unit: targetItem.unit,
+      reason: params.reason,
+      date: params.date,
+      recordedBy: params.recordedBy,
+      createdAt: new Date().toISOString()
+    };
+    saveInventoryMovements([newMovement, ...movements]);
+
+    addSecurityLog(
+      params.recordedBy,
+      `Inventory ${params.type.toUpperCase()}`,
+      'Inventory',
+      `${params.type === 'adjustment' ? 'Adjusted' : 'Deducted'} ${params.quantity} ${targetItem.unit} of ${targetItem.name}. Reason: ${params.reason}`,
+      targetItem.id
+    );
+
+    return { success: true, item: targetItem };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to record movement' };
+  }
+}
+
+// ----------------------------------------------------
+// SECTION 4: Controlled Attendance Correction API
+// ----------------------------------------------------
+export async function correctAttendanceRecord(params: {
+  logId: string;
+  newStatus: ScanEligibility;
+  overrideReason: string;
+  correctedBy: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auditNote = `[CORRECTION by ${params.correctedBy} at ${new Date().toLocaleString()}]: Status changed to ${params.newStatus}. Reason: ${params.overrideReason}`;
+
+    if (supabase) {
+      // 1. Update meal_logs table
+      const { error } = await supabase
+        .from('meal_logs')
+        .update({
+          scan_status: params.newStatus,
+          override_notes: auditNote
+        })
+        .eq('id', params.logId);
+
+      if (error) {
+        console.warn('meal_logs correction error:', error.message);
+      }
+
+      // 2. Also update attendance_logs if matching UUID exists
+      try {
+        await supabase
+          .from('attendance_logs')
+          .update({
+            is_valid: params.newStatus === 'ALLOW',
+            notes: auditNote
+          })
+          .eq('id', params.logId);
+      } catch {}
+    }
+
+    // 3. Security audit log
+    addSecurityLog(
+      params.correctedBy,
+      'Attendance Record Corrected',
+      'Attendance',
+      auditNote,
+      params.logId
+    );
+
+    window.dispatchEvent(new CustomEvent('morya_meal_logged'));
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to correct record' };
+  }
+}
+
 
 

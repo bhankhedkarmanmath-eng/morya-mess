@@ -11,7 +11,9 @@ import {
   RefreshCw,
   User,
   Receipt,
-  AlertCircle
+  AlertCircle,
+  Printer,
+  X
 } from 'lucide-react';
 
 interface CashPaymentsViewProps {
@@ -40,6 +42,7 @@ export const CashPaymentsView: React.FC<CashPaymentsViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [receiptTarget, setReceiptTarget] = useState<SupabasePaymentRecord | null>(null);
 
   useEffect(() => {
     loadCashPayments();
@@ -307,10 +310,20 @@ export const CashPaymentsView: React.FC<CashPaymentsViewProps> = ({
                       {p.recordedBy || 'Owner Desk'}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>Verified Cash</span>
-                      </span>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setReceiptTarget(p)}
+                          className="px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-[10px] transition cursor-pointer flex items-center gap-1"
+                          title="Generate payment receipt voucher"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          <span>Receipt</span>
+                        </button>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified</span>
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -319,6 +332,86 @@ export const CashPaymentsView: React.FC<CashPaymentsViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Cash Receipt Voucher Modal */}
+      {receiptTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-sm text-slate-900">Cash Payment Receipt Voucher</h3>
+              </div>
+              <button 
+                onClick={() => setReceiptTarget(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-3 text-xs">
+              <div className="text-center pb-2 border-b border-emerald-200">
+                <h4 className="font-black text-emerald-950 text-base">MORYA MESS & HOSTEL DINING</h4>
+                <p className="text-[11px] text-emerald-800">Counter Cash Receipt Acknowledgment</p>
+              </div>
+
+              <div className="space-y-1.5 text-slate-800">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Receipt Ref:</span>
+                  <span className="font-mono font-bold">#{receiptTarget.id.slice(0, 12)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Customer Name:</span>
+                  <strong className="text-slate-900">{receiptTarget.customerName}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Mobile:</span>
+                  <span className="font-mono">{receiptTarget.customerPhone || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payment Mode:</span>
+                  <span className="font-black uppercase text-emerald-900">CASH (Physical Currency)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Date & Time:</span>
+                  <span>{new Date(receiptTarget.createdAt).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Collected By:</span>
+                  <span>{receiptTarget.recordedBy || 'Owner Desk'}</span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-emerald-200">
+                  <span className="font-bold text-slate-800">Amount Received:</span>
+                  <span className="font-black text-emerald-700 text-lg">₹{receiptTarget.amount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Remarks:</span>
+                  <span className="italic text-slate-600">{receiptTarget.notes || 'Counter cash receipt'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReceiptTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 text-xs cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Receipt</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -33,7 +33,8 @@ import {
   fetchAnnouncementsFromSupabase,
   fetchComplaintsFromSupabase,
   submitStudentComplaint,
-  updateStudentProfileInSupabase
+  updateStudentProfileInSupabase,
+  subscribeToStudentNotificationsRealtime
 } from '../lib/ownerFeaturesApi';
 import { 
   loadPolls, 
@@ -51,7 +52,9 @@ import {
   StudentComplaintsTab,
   StudentTimingsTab,
   StudentRulesFaqTab,
-  StudentSupportTab
+  StudentSupportTab,
+  AttendanceDisputeModal,
+  SmartAlertBanners
 } from './views/student';
 import { 
   Menu,
@@ -194,6 +197,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // Selected receipt modal
   const [selectedReceipt, setSelectedReceipt] = useState<SupabasePaymentRecord | null>(null);
 
+  // Attendance Dispute & Issue Reporting State (Feature 25)
+  const [selectedDisputeLog, setSelectedDisputeLog] = useState<MealLog | null>(null);
+  const [disputedLogIds, setDisputedLogIds] = useState<string[]>([]);
+  const [attendanceDisputeSuccessMsg, setAttendanceDisputeSuccessMsg] = useState<string | null>(null);
+
+  // Initial loading indicator (Feature 26)
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   // Statement Month Selector
   const currentMonthStr = today.slice(0, 7); // e.g. "2026-09"
   const [statementMonth, setStatementMonth] = useState<string>(currentMonthStr);
@@ -319,6 +330,16 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       const complaintsData = await fetchComplaintsFromSupabase();
       setComplaints(complaintsData);
 
+      // Extract existing attendance dispute log IDs (Feature 25)
+      const existingDisputes = (complaintsData || [])
+        .filter(c => c.customerId === customer.id && (c.category === 'Attendance Dispute' || c.subject?.includes('Attendance Dispute')))
+        .map(c => {
+          const match = c.description?.match(/Authoritative Record ID:\s*([^\s\n]+)/);
+          return match ? match[1] : '';
+        })
+        .filter(Boolean);
+      setDisputedLogIds(prev => Array.from(new Set([...prev, ...existingDisputes])));
+
       // 10. UPI Config
       const upiCfg = await fetchMessUpiConfig();
       setUpiConfig(upiCfg);
@@ -334,6 +355,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       console.warn('Error refreshing student data:', e);
     } finally {
       setIsRefreshing(false);
+      setIsInitialLoading(false);
     }
   }, [customer.id, customer.phone, customer.leaves, initialMealLogs]);
 
@@ -352,7 +374,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     window.addEventListener('morya_complaints_updated', handleUpdate);
     window.addEventListener('morya_reminders_updated', handleUpdate);
 
+    // Feature 28: Supabase Realtime notifications subscription
+    const unsubRealtime = subscribeToStudentNotificationsRealtime(customer.id, () => {
+      refreshAllStudentData();
+    });
+
     return () => {
+      unsubRealtime();
       window.removeEventListener('morya_payment_updated', handleUpdate);
       window.removeEventListener('morya_payment_created', handleUpdate);
       window.removeEventListener('morya_leave_updated', handleUpdate);
@@ -362,7 +390,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       window.removeEventListener('morya_complaints_updated', handleUpdate);
       window.removeEventListener('morya_reminders_updated', handleUpdate);
     };
-  }, [refreshAllStudentData]);
+  }, [refreshAllStudentData, customer.id]);
 
   // Periodic Shift Ticker (Every 10 seconds)
   useEffect(() => {
@@ -1217,6 +1245,17 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         </button>
       </nav>
 
+      {/* Database Sync Loading Indicator (Feature 26) */}
+      {isInitialLoading && (
+        <div className="w-full max-w-full sm:max-w-2xl p-3.5 bg-orange-50 border border-orange-200 rounded-2xl flex items-center justify-between text-xs text-orange-950 mb-3 animate-pulse shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <RefreshCw className="w-4 h-4 text-orange-600 animate-spin" />
+            <span className="font-bold">Syncing authoritative records from Supabase...</span>
+          </div>
+          <span className="text-[10px] text-orange-800 uppercase font-black tracking-wider">Live Sync</span>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* FEATURE 1 — STUDENT DASHBOARD (REAL SUPABASE DATA) */}
       {/* ========================================================================= */}
@@ -1253,6 +1292,18 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <ChevronRight className="w-4 h-4 text-orange-500" />
             </button>
           </div>
+
+          {/* Smart Alerts: Subscription, Payments, and Leaves (Features 22, 23, 24) */}
+          <SmartAlertBanners
+            customer={customer}
+            payments={payments}
+            leaveRequests={leaveRequests}
+            authoritativeBalance={authoritativeBalance}
+            daysRemaining={daysRemaining}
+            isExpired={isExpired}
+            isExpiringSoon={isExpiringSoon}
+            onNavigateTab={(tab) => setActiveTab(tab as StudentTab)}
+          />
 
           {/* Member Profile Overview Card */}
           <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
@@ -1607,6 +1658,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </button>
             </div>
 
+            {attendanceDisputeSuccessMsg && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{attendanceDisputeSuccessMsg}</span>
+              </div>
+            )}
+
             {/* Attendance Record List */}
             {filteredAttendance.length === 0 ? (
               <div className="p-10 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
@@ -1619,34 +1677,70 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 {filteredAttendance.map(log => {
                   const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                   const isAllow = log.scanStatus === 'ALLOW' || (log.scanStatus as string) === 'VERIFIED';
+                  const methodStr = log.overrideNotes || (log.reason?.includes('Counter') ? 'Counter Verification' : 'Gate QR Scanner');
+                  const isDisputed = disputedLogIds.includes(log.id);
+
                   return (
-                    <div key={log.id} className="py-3 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    <div key={log.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
                           log.mealType === 'lunch' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'
                         }`}>
                           {log.mealType === 'lunch' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-black text-slate-900 capitalize text-sm">{log.mealType} Meal</span>
-                            <span className="font-mono text-[11px] text-slate-400">{log.date} at {timeStr}</span>
+                            <span className="font-mono text-[11px] text-slate-500 font-bold">{log.date} at {timeStr}</span>
                           </div>
-                          <span className="text-[11px] text-slate-500 block">{log.reason || 'Verified Entry'}</span>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+                            <span>Method: <strong className="text-slate-700">{methodStr}</strong></span>
+                            <span>•</span>
+                            <span className="text-slate-600">{log.reason || 'Verified Entry'}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        isAllow ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {isAllow ? 'Verified' : 'Blocked'}
-                      </span>
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        {isDisputed ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            Issue Reported
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDisputeLog(log)}
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-orange-700 hover:bg-orange-50 transition cursor-pointer border border-slate-200"
+                            title="Report incorrect meal, timing, or presence"
+                          >
+                            Report Issue
+                          </button>
+                        )}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          isAllow ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {isAllow ? 'Verified' : 'Blocked'}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {/* Attendance Dispute Modal (Feature 25) */}
+          <AttendanceDisputeModal
+            isOpen={Boolean(selectedDisputeLog)}
+            log={selectedDisputeLog}
+            customer={customer}
+            onClose={() => setSelectedDisputeLog(null)}
+            onDisputeSubmitted={(logId) => {
+              setDisputedLogIds(prev => Array.from(new Set([...prev, logId])));
+              setAttendanceDisputeSuccessMsg('Attendance dispute reported to Mess Owner. Your original record remains intact while under review.');
+              setTimeout(() => setAttendanceDisputeSuccessMsg(null), 5000);
+            }}
+          />
         </div>
       )}
 

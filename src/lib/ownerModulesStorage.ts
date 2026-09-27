@@ -6,7 +6,10 @@ import {
   MessReminderNotice, 
   MealRatingReview, 
   CustomerComplaint, 
-  SupportTicket 
+  SupportTicket,
+  InventoryItem,
+  InventoryMovement,
+  InventorySupplier
 } from '../types/mess';
 
 const PREFIX = 'morya_v3_mod_';
@@ -20,7 +23,10 @@ const KEYS = {
   MEAL_RATINGS: `${PREFIX}meal_ratings`,
   COMPLAINTS: `${PREFIX}complaints`,
   SUPPORT_TICKETS: `${PREFIX}support_tickets`,
-  SECURITY_LOGS: `${PREFIX}security_logs`
+  SECURITY_LOGS: `${PREFIX}security_logs`,
+  INVENTORY_ITEMS: `${PREFIX}inventory_items`,
+  INVENTORY_MOVEMENTS: `${PREFIX}inventory_movements`,
+  INVENTORY_SUPPLIERS: `${PREFIX}inventory_suppliers`
 };
 
 export interface SecurityAuditEntry {
@@ -383,3 +389,197 @@ export function addSecurityLog(actor: string, action: string, module: string, de
     console.warn('addSecurityLog err:', e);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 10. Kitchen Stock & Inventory
+// ---------------------------------------------------------------------------
+export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
+  {
+    id: 'inv-1',
+    name: 'Lokwan Wheat Atta (Wheat Flour)',
+    category: 'Grains & Flours',
+    currentStock: 120,
+    unit: 'kg',
+    minStockLevel: 40,
+    costPerUnit: 38,
+    supplierName: 'Latur Wholesale Grains (APMC)',
+    lastRestockedDate: '2026-09-24',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-2',
+    name: 'Kolam Steamed Rice',
+    category: 'Grains & Flours',
+    currentStock: 90,
+    unit: 'kg',
+    minStockLevel: 35,
+    costPerUnit: 52,
+    supplierName: 'Latur Wholesale Grains (APMC)',
+    lastRestockedDate: '2026-09-23',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-3',
+    name: 'Toor Dal (Pigeon Pea Dal)',
+    category: 'Pulses & Dals',
+    currentStock: 15,
+    unit: 'kg',
+    minStockLevel: 25,
+    costPerUnit: 145,
+    supplierName: 'Latur Wholesale Grains (APMC)',
+    lastRestockedDate: '2026-09-20',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-4',
+    name: 'Refined Sunflower Oil',
+    category: 'Cooking Oils & Ghee',
+    currentStock: 30,
+    unit: 'liter',
+    minStockLevel: 20,
+    costPerUnit: 135,
+    supplierName: 'Latur Wholesale Grains (APMC)',
+    lastRestockedDate: '2026-09-22',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-5',
+    name: 'Fresh Red Onions (Kanda)',
+    category: 'Vegetables & Fresh',
+    currentStock: 8,
+    unit: 'kg',
+    minStockLevel: 20,
+    costPerUnit: 32,
+    supplierName: 'Shree Ganesh Vegetable Mart',
+    lastRestockedDate: '2026-09-25',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-6',
+    name: 'Potatoes (Batata)',
+    category: 'Vegetables & Fresh',
+    currentStock: 25,
+    unit: 'kg',
+    minStockLevel: 15,
+    costPerUnit: 28,
+    supplierName: 'Shree Ganesh Vegetable Mart',
+    lastRestockedDate: '2026-09-25',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-7',
+    name: 'Commercial LPG Cylinder (19kg)',
+    category: 'Gas & Fuel',
+    currentStock: 2,
+    unit: 'cylinder',
+    minStockLevel: 2,
+    costPerUnit: 1850,
+    supplierName: 'Bharat Gas Commercial Distributor',
+    lastRestockedDate: '2026-09-18',
+    lastUpdated: new Date().toISOString()
+  },
+  {
+    id: 'inv-8',
+    name: 'Fresh Cow Milk (Daily Morning)',
+    category: 'Dairy & Milk',
+    currentStock: 0,
+    unit: 'liter',
+    minStockLevel: 10,
+    costPerUnit: 48,
+    supplierName: 'Rajhans Dairy Centre Latur',
+    lastRestockedDate: '2026-09-26',
+    lastUpdated: new Date().toISOString()
+  }
+];
+
+export const DEFAULT_INVENTORY_SUPPLIERS: InventorySupplier[] = [
+  {
+    id: 'sup-1',
+    name: 'Latur Wholesale Grains & Provisions (APMC)',
+    phone: '9822012345',
+    category: 'Grains, Dals, Oil & Sugar',
+    address: 'Shop 42, Grain Market APMC Yard, Latur',
+    contactPerson: 'Suresh Patil',
+    isActive: true
+  },
+  {
+    id: 'sup-2',
+    name: 'Shree Ganesh Vegetable Mart',
+    phone: '9822987654',
+    category: 'Fresh Vegetables, Onions & Potatoes',
+    address: 'Subhash Chowk Mandi, Latur',
+    contactPerson: 'Ganesh Shinde',
+    isActive: true
+  },
+  {
+    id: 'sup-3',
+    name: 'Rajhans Dairy Centre Latur',
+    phone: '9423123890',
+    category: 'Milk, Curd & Paneer',
+    address: 'Ausa Road, Latur',
+    contactPerson: 'Balasaheb More',
+    isActive: true
+  },
+  {
+    id: 'sup-4',
+    name: 'Bharat Gas Commercial Agency',
+    phone: '9422098765',
+    category: 'Commercial 19kg Gas Cylinders',
+    address: 'MIDC Road, Latur',
+    contactPerson: 'Agency Desk',
+    isActive: true
+  }
+];
+
+export function loadInventoryItems(): InventoryItem[] {
+  try {
+    const raw = localStorage.getItem(KEYS.INVENTORY_ITEMS);
+    return raw ? JSON.parse(raw) : DEFAULT_INVENTORY_ITEMS;
+  } catch {
+    return DEFAULT_INVENTORY_ITEMS;
+  }
+}
+
+export function saveInventoryItems(items: InventoryItem[]): void {
+  try {
+    localStorage.setItem(KEYS.INVENTORY_ITEMS, JSON.stringify(items));
+    window.dispatchEvent(new CustomEvent('morya_inventory_updated'));
+  } catch (e) {
+    console.warn('saveInventoryItems err:', e);
+  }
+}
+
+export function loadInventoryMovements(): InventoryMovement[] {
+  try {
+    const raw = localStorage.getItem(KEYS.INVENTORY_MOVEMENTS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveInventoryMovements(movements: InventoryMovement[]): void {
+  try {
+    localStorage.setItem(KEYS.INVENTORY_MOVEMENTS, JSON.stringify(movements));
+  } catch (e) {
+    console.warn('saveInventoryMovements err:', e);
+  }
+}
+
+export function loadInventorySuppliers(): InventorySupplier[] {
+  try {
+    const raw = localStorage.getItem(KEYS.INVENTORY_SUPPLIERS);
+    return raw ? JSON.parse(raw) : DEFAULT_INVENTORY_SUPPLIERS;
+  } catch {
+    return DEFAULT_INVENTORY_SUPPLIERS;
+  }
+}
+
+export function saveInventorySuppliers(suppliers: InventorySupplier[]): void {
+  try {
+    localStorage.setItem(KEYS.INVENTORY_SUPPLIERS, JSON.stringify(suppliers));
+  } catch (e) {
+    console.warn('saveInventorySuppliers err:', e);
+  }
+}
+

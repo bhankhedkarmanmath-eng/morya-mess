@@ -450,6 +450,9 @@ export interface SupabasePaymentRecord {
   isReversal?: boolean;
   createdAt: string;
   updatedAt?: string;
+  date?: string;
+  utrNumber?: string;
+  rejectReason?: string;
 }
 
 // ==========================================
@@ -513,6 +516,7 @@ export type OwnerNavPage =
   | 'walkin_meal_types'
   | 'walkin_payments'
   | 'expense_tracker'
+  | 'inventory'
   // Menu & Engagement
   | 'meal_plans_pricing'
   | 'meal_rate_timing'
@@ -610,7 +614,8 @@ export interface CustomerComplaint {
   customerId: string;
   customerName: string;
   customerPhone?: string;
-  category: 'Food Quality' | 'Cleanliness' | 'Staff Behavior' | 'Quantity' | 'Other';
+  category: 'Food Quality' | 'Cleanliness' | 'Staff Behavior' | 'Quantity' | 'Attendance Dispute' | 'Other';
+  subject?: string;
   description: string;
   status: 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   ownerReply?: string;
@@ -628,4 +633,61 @@ export interface SupportTicket {
   createdAt: string;
   response?: string;
 }
+
+// ==========================================
+// FEATURE 6: Practical Mess Stock & Inventory
+// ==========================================
+export type InventoryCategory =
+  | 'Grains & Flours'
+  | 'Pulses & Dals'
+  | 'Cooking Oils & Ghee'
+  | 'Vegetables & Fresh'
+  | 'Dairy & Milk'
+  | 'Spices & Condiments'
+  | 'Gas & Fuel'
+  | 'Cleaning & Kitchen Hygiene'
+  | 'Disposables & Packaging'
+  | 'Other Supplies';
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: InventoryCategory;
+  currentStock: number;
+  unit: 'kg' | 'liter' | 'bag' | 'packet' | 'can' | 'piece' | 'cylinder';
+  minStockLevel: number;
+  costPerUnit: number;
+  supplierName?: string;
+  lastRestockedDate?: string;
+  lastUpdated: string;
+  notes?: string;
+}
+
+export interface InventoryMovement {
+  id: string;
+  itemId: string;
+  itemName: string;
+  type: 'purchase' | 'consumption' | 'wastage' | 'adjustment';
+  quantity: number;
+  unit: string;
+  cost?: number;
+  reason?: string;
+  supplier?: string;
+  invoiceNumber?: string;
+  date: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+export interface InventorySupplier {
+  id: string;
+  name: string;
+  phone: string;
+  category: string;
+  address?: string;
+  gstNumber?: string;
+  contactPerson?: string;
+  isActive: boolean;
+}
+
 

@@ -6,3 +6,5 @@ export { StudentComplaintsTab } from './StudentComplaintsTab';
 export { StudentTimingsTab } from './StudentTimingsTab';
 export { StudentRulesFaqTab } from './StudentRulesFaqTab';
 export { StudentSupportTab } from './StudentSupportTab';
+export { AttendanceDisputeModal } from './AttendanceDisputeModal';
+export { SmartAlertBanners } from './SmartAlertBanners';
