@@ -1,42 +1,84 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Customer, MealLog, Expense, Worker, CleaningInspection, BusinessRulesConfig, UserRole, TrialVisitor, ScanEligibility, MealType } from './types/mess';
-import { 
-  loadCustomers, 
-  saveCustomers, 
-  loadMealLogs, 
-  saveMealLogs, 
-  loadExpenses, 
-  saveExpenses, 
-  loadWorkers, 
-  saveWorkers, 
-  loadCleanings, 
-  saveCleanings, 
-  loadRules, 
-  saveRules, 
-  loadTrials, 
+import React, { useState, useEffect } from 'react';
+import { Customer, MealLog, Expense, Worker, CleaningInspection, BusinessRulesConfig, TrialVisitor, UserRole, ScanEligibility, MealType, Gender } from './types/mess';
+import {
+  loadCustomers,
+  saveCustomers,
+  loadDeletedCustomerIds,
+  saveDeletedCustomerId,
+  removeDeletedCustomerId,
+  saveDeletedCustomerIds,
+  loadMealLogs,
+  saveMealLogs,
+  loadExpenses,
+  saveExpenses,
+  loadWorkers,
+  saveWorkers,
+  loadCleanings,
+  saveCleanings,
+  getStoredBusinessRules,
+  saveBusinessRules,
+  loadTrials,
   saveTrials,
-  getTodayString,
-  getCurrentMealType
+  getTodayString
 } from './lib/storage';
-import { 
-  syncWithSupabase, 
-  syncCustomerToSupabase, 
-  syncMealLogToSupabase, 
+import {
+  syncWithSupabase,
+  syncCustomerToSupabase,
+  deleteCustomerInSupabase,
+  syncMealLogToSupabase,
   syncExpenseToSupabase,
-  subscribeToAttendanceLogs,
+  updateCustomerInSupabase,
   fetchAttendanceLogsFromSupabase,
-  ensureCustomerSyncedToSupabase,
-  fetchCustomersFromSupabase
+  subscribeToAttendanceLogs
 } from './lib/supabaseSync';
+import { supabase } from './lib/supabase';
+import { getSavedSession, performSignOut, AuthenticatedUser } from './lib/authService';
+import { 
+  startLiveSyncEngine, 
+  subscribeToSync, 
+  pushSyncToServer, 
+  pullSyncFromServer,
+  recordAttendanceToServer, 
+  submitLeaveRequestToServer, 
+  actionLeaveOnServer 
+} from './lib/syncEngine';
+
 import { Navigation } from './components/Navigation';
+import { OwnerDrawerMenu } from './components/OwnerDrawerMenu';
 import { DashboardView } from './components/DashboardView';
 import { CustomersListView } from './components/CustomersListView';
 import { MealLogsView } from './components/MealLogsView';
 import { ExpensesView } from './components/ExpensesView';
 import { WorkersAndKitchenView } from './components/WorkersAndKitchenView';
 import { AuditAndReportsView } from './components/AuditAndReportsView';
+import { SubscriptionsView } from './components/views/SubscriptionsView';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { PredictCampaignResultsModal } from './components/PredictCampaignResultsModal';
+import { CampaignParticipantsHubModal } from './components/CampaignParticipantsHubModal';
+import { KitchenEstimatorModal } from './components/KitchenEstimatorModal';
+import { WhatsAppDuesBotModal } from './components/WhatsAppDuesBotModal';
+import { AttendanceIntegrityModal } from './components/AttendanceIntegrityModal';
+import { KitchenCookSheetModal } from './components/KitchenCookSheetModal';
+import { MessPnlCostPerPlateModal } from './components/MessPnlCostPerPlateModal';
+import { DailyProfitDigestModal } from './components/DailyProfitDigestModal';
+import { 
+  fetchOwnerNotifications, 
+  markNotificationAsRead, 
+  markAllNotificationsAsRead, 
+  subscribeToOwnerNotificationsRealtime,
+  deleteOwnerNotification,
+  clearAllReadOwnerNotifications,
+  sendNotificationToStudent,
+  createOwnerNotification,
+  getNotifBroadcastChannel,
+  fetchTrialVisitorsFromSupabase
+} from './lib/ownerFeaturesApi';
+import { AttendanceCenterView } from './components/views/AttendanceCenterView';
+import { BillingOverviewView } from './components/views/BillingOverviewView';
+import { InventoryCenterView } from './components/views/InventoryCenterView';
+import { WeeklyMenuEditorView } from './components/views/WeeklyMenuEditorView';
+import { ExcelExportHubView } from './components/views/ExcelExportHubView';
 import { QrScannerModal } from './components/QrScannerModal';
-import { UniversalQrManagerModal } from './components/UniversalQrManagerModal';
 import { AddCustomerModal } from './components/AddCustomerModal';
 import { Customer360Modal } from './components/Customer360Modal';
 import { CustomerCardPrintModal } from './components/CustomerCardPrintModal';
@@ -44,238 +86,191 @@ import { RenewalModal } from './components/RenewalModal';
 import { PaymentModal } from './components/PaymentModal';
 import { PenaltyModal } from './components/PenaltyModal';
 import { SettingsModal } from './components/SettingsModal';
-import { StudentPortalView } from './components/StudentPortalView';
 import { PortalSwitcherModal } from './components/PortalSwitcherModal';
+import { UniversalQrManagerModal } from './components/UniversalQrManagerModal';
 import { GanpatiSplash } from './components/GanpatiSplash';
 import { PortalSelectionScreen } from './components/PortalSelectionScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { SetNewPasswordScreen } from './components/SetNewPasswordScreen';
-
-// The 6 High-Priority Owner App Features
-import { OwnerNotification, OwnerNavPage, SupabasePaymentRecord } from './types/mess';
-import { NotificationCenterModal } from './components/NotificationCenterModal';
-import { OwnerDrawerMenu } from './components/OwnerDrawerMenu';
-import { PaymentsManagerView } from './components/PaymentsManagerView';
-import { MonthlyStatementGenerator } from './components/MonthlyStatementGenerator';
-import { TrialStudentsManagerView } from './components/TrialStudentsManagerView';
-
-// Dedicated Views for Owner App Modules
-import { AttendanceScannerScreen } from './components/views/AttendanceScannerScreen';
-import { AttendanceCenterView } from './components/views/AttendanceCenterView';
-import { BillingOverviewView } from './components/views/BillingOverviewView';
-import { CashPaymentsView } from './components/views/CashPaymentsView';
-import { ComplaintsTrackerView } from './components/views/ComplaintsTrackerView';
-import { CustomerLedgerView } from './components/views/CustomerLedgerView';
-import { ExpenseTrackerView } from './components/views/ExpenseTrackerView';
+import { StudentPortalView } from './components/StudentPortalView';
+import { SearchCustomerView } from './components/views/SearchCustomerView';
 import { LeavesManagerView } from './components/views/LeavesManagerView';
-import { MarkAttendanceView } from './components/views/MarkAttendanceView';
-import { MealPlansPricingView } from './components/views/MealPlansPricingView';
-import { MealRateTimingView } from './components/views/MealRateTimingView';
-import { MealRatingsView } from './components/views/MealRatingsView';
-import { MessSettingsView } from './components/views/MessSettingsView';
-import { MonthlyStatementCalculatorView } from './components/views/MonthlyStatementCalculatorView';
-import { MyMessProfileView } from './components/views/MyMessProfileView';
+import { WalkinPOSView } from './components/views/WalkinPOSView';
+import { WalkinMealTypesView } from './components/views/WalkinMealTypesView';
+import { WalkinPaymentsView } from './components/views/WalkinPaymentsView';
+import { CashPaymentsView } from './components/views/CashPaymentsView';
+import { UPIPaymentsView } from './components/views/UPIPaymentsView';
 import { PaymentHistoryView } from './components/views/PaymentHistoryView';
 import { PaymentVerificationView } from './components/views/PaymentVerificationView';
 import { PendingPaymentsView } from './components/views/PendingPaymentsView';
+import { CustomerLedgerView } from './components/views/CustomerLedgerView';
+import { MonthlyStatementCalculatorView } from './components/views/MonthlyStatementCalculatorView';
 import { PollsManagerView } from './components/views/PollsManagerView';
 import { RemindersNoticesView } from './components/views/RemindersNoticesView';
+import { MealRatingsView } from './components/views/MealRatingsView';
+import { ComplaintsTrackerView } from './components/views/ComplaintsTrackerView';
 import { RolesPermissionsView } from './components/views/RolesPermissionsView';
-import { SearchCustomerView } from './components/views/SearchCustomerView';
 import { StaffManagementView } from './components/views/StaffManagementView';
-import { SubscriptionsView } from './components/views/SubscriptionsView';
-import { UPIPaymentsView } from './components/views/UPIPaymentsView';
-import { WalkinMealTypesView } from './components/views/WalkinMealTypesView';
-import { WalkinPOSView } from './components/views/WalkinPOSView';
-import { WalkinPaymentsView } from './components/views/WalkinPaymentsView';
-import { WeeklyMenuEditorView } from './components/views/WeeklyMenuEditorView';
-import { InventoryCenterView } from './components/views/InventoryCenterView';
-import { 
-  fetchOwnerNotifications, 
-  markNotificationAsRead, 
-  markAllNotificationsAsRead,
-  subscribeToOwnerNotificationsRealtime,
-  fetchPaymentsFromSupabase
-} from './lib/ownerFeaturesApi';
-import { 
-  AuthState, 
-  AuthPortal, 
-  AuthenticatedUser, 
-  getSavedSession, 
-  performSignOut 
-} from './lib/authService';
-import { supabase } from './lib/supabase';
+import { MyMessProfileView } from './components/views/MyMessProfileView';
+import { HelpSupportView } from './components/views/HelpSupportView';
+import { SupportRequestsView } from './components/views/SupportRequestsView';
+import { PaymentsManagerView } from './components/PaymentsManagerView';
+import { AttendanceReportsView } from './components/views/AttendanceReportsView';
+import { CustomerReportsView } from './components/views/CustomerReportsView';
+import { PaymentReportsView } from './components/views/PaymentReportsView';
+import { ExpenseReportsView } from './components/views/ExpenseReportsView';
+import { BusinessSummaryView } from './components/views/BusinessSummaryView';
+import { MessPaymentQrView } from './components/views/MessPaymentQrView';
+import { TrialQrModal } from './components/TrialQrModal';
+import { TrialStudentPortalView } from './components/TrialStudentPortalView';
+import { TrialStudentsManagerView } from './components/TrialStudentsManagerView';
+import { MessSettingsView } from './components/views/MessSettingsView';
+import { SecurityActivityLogView } from './components/views/SecurityActivityLogView';
+import { addTrialStudentInSupabase } from './lib/ownerFeaturesApi';
 
 export function App() {
-  // Splash screen state
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
+  const [authStep, setAuthStep] = useState<'PORTAL_CHOICE' | 'LOGIN' | 'SET_NEW_PASSWORD' | 'AUTHENTICATED'>('PORTAL_CHOICE');
+  const [portal, setPortal] = useState<'owner' | 'student'>('owner');
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
+  const [passwordResetUser, setPasswordResetUser] = useState<AuthenticatedUser | null>(null);
 
-  // Authentication & Role-Based Access State
-  const [authState, setAuthState] = useState<AuthState>('PORTAL_CHOICE');
-  const [selectedPortal, setSelectedPortal] = useState<AuthPortal>('owner');
-  const [authenticatedUser, setAuthenticatedUser] = useState<AuthenticatedUser | null>(null);
-  const [pendingResetUser, setPendingResetUser] = useState<AuthenticatedUser | null>(null);
-
-  // Core domain state
   const [customers, setCustomers] = useState<Customer[]>(() => loadCustomers());
   const [mealLogs, setMealLogs] = useState<MealLog[]>(() => loadMealLogs());
   const [expenses, setExpenses] = useState<Expense[]>(() => loadExpenses());
   const [workers, setWorkers] = useState<Worker[]>(() => loadWorkers());
   const [cleanings, setCleanings] = useState<CleaningInspection[]>(() => loadCleanings());
-  const [rules, setRules] = useState<BusinessRulesConfig>(() => loadRules());
+  const [rules, setRules] = useState<BusinessRulesConfig>(() => getStoredBusinessRules());
   const [trials, setTrials] = useState<TrialVisitor[]>(() => loadTrials());
 
-  // UI state
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports'>('dashboard');
+  const [currentTab, setCurrentTab] = useState('dashboard');
   const [reportsInitialTab, setReportsInitialTab] = useState<'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals'>('pnl');
   const [currentRole, setCurrentRole] = useState<UserRole>('owner');
   const [currentPortal, setCurrentPortal] = useState<'owner' | 'student'>('owner');
-  const [studentPortalCustomer, setStudentPortalCustomer] = useState<Customer | null>(null);
-  const [pendingPaymentsCount, setPendingPaymentsCount] = useState<number>(0);
+  const [selectedStudentCustomer, setSelectedStudentCustomer] = useState<Customer | null>(null);
 
-  // Features 1 to 6 states
-  const [isOwnerDrawerOpen, setIsOwnerDrawerOpen] = useState(false);
-  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
-  const [notifications, setNotifications] = useState<OwnerNotification[]>([]);
-  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
-  const [activeOwnerPage, setActiveOwnerPage] = useState<OwnerNavPage>('dashboard');
-  const [selectedStatementCustomer, setSelectedStatementCustomer] = useState<Customer | null>(null);
-
-  // Modals state
+  // Modals & Navigation Drawer
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isUniversalQrOpen, setIsUniversalQrOpen] = useState(false);
+  const [isTrialQrModalOpen, setIsTrialQrModalOpen] = useState(false);
+  const [isTrialScanMode, setIsTrialScanMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname.toLowerCase();
+    return (
+      params.get('portal') === 'trial' || 
+      params.get('view') === 'trial' || 
+      params.get('mode') === 'trial' || 
+      params.get('portal') === 'trial_entry' ||
+      pathname === '/trial' ||
+      pathname.startsWith('/trial/') ||
+      window.location.hash === '#trial' ||
+      window.location.hash === '#trial-entry'
+    );
+  });
+
+  // Listen to popstate / hash change for trial scanner entry
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      const pathname = window.location.pathname.toLowerCase();
+      const isTrial = (
+        params.get('portal') === 'trial' || 
+        params.get('view') === 'trial' || 
+        params.get('mode') === 'trial' || 
+        params.get('portal') === 'trial_entry' ||
+        pathname === '/trial' ||
+        pathname.startsWith('/trial/') ||
+        window.location.hash === '#trial' ||
+        window.location.hash === '#trial-entry'
+      );
+      setIsTrialScanMode(isTrial);
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPredictCampaignOpen, setIsPredictCampaignOpen] = useState(false);
+  const [isCampaignParticipantsOpen, setIsCampaignParticipantsOpen] = useState(false);
+  const [isKitchenEstimatorOpen, setIsKitchenEstimatorOpen] = useState(false);
+  const [isWhatsAppDuesBotOpen, setIsWhatsAppDuesBotOpen] = useState(false);
+  const [isAttendanceIntegrityOpen, setIsAttendanceIntegrityOpen] = useState(false);
+  const [isMaharajCookSheetOpen, setIsMaharajCookSheetOpen] = useState(false);
+  const [isMessPnlOpen, setIsMessPnlOpen] = useState(false);
+  const [isDailyProfitDigestOpen, setIsDailyProfitDigestOpen] = useState(false);
   const [isPortalSwitcherOpen, setIsPortalSwitcherOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
 
-  // Target Customer modals
   const [selected360Customer, setSelected360Customer] = useState<Customer | null>(null);
-  const [selectedPrintCustomer, setSelectedPrintCustomer] = useState<Customer | null>(null);
+  const [selectedCardPrintCustomer, setSelectedCardPrintCustomer] = useState<Customer | null>(null);
   const [selectedRenewCustomer, setSelectedRenewCustomer] = useState<Customer | null>(null);
   const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<Customer | null>(null);
   const [selectedPenaltyCustomer, setSelectedPenaltyCustomer] = useState<Customer | null>(null);
 
-  // Check pending payments for navigation badge
-  const checkPendingPayments = useCallback(async () => {
-    try {
-      const all = await fetchPaymentsFromSupabase();
-      const count = all.filter((p: SupabasePaymentRecord) => p.status === 'pending').length;
-      setPendingPaymentsCount(count);
-    } catch {}
-  }, []);
-
-  // Load Notifications & Supabase Realtime
-  useEffect(() => {
-    loadOwnerNotifications();
-    checkPendingPayments();
-
-    const handlePaymentEvent = () => {
-      checkPendingPayments();
-      loadOwnerNotifications();
-    };
-
-    window.addEventListener('morya_payment_created', handlePaymentEvent);
-    window.addEventListener('morya_payment_updated', handlePaymentEvent);
-    window.addEventListener('morya_notification_created', () => loadOwnerNotifications());
-
-    const unsub = subscribeToOwnerNotificationsRealtime((newNotification) => {
-      setNotifications(prev => [newNotification, ...prev.filter(n => n.id !== newNotification.id)]);
-      checkPendingPayments();
-    });
-
-    return () => {
-      unsub();
-      window.removeEventListener('morya_payment_created', handlePaymentEvent);
-      window.removeEventListener('morya_payment_updated', handlePaymentEvent);
-    };
-  }, [checkPendingPayments]);
-
-  const loadOwnerNotifications = async () => {
-    setIsNotificationsLoading(true);
-    const data = await fetchOwnerNotifications();
-    setNotifications(data);
-    setIsNotificationsLoading(false);
-  };
-
-  const handleMarkNotificationRead = async (id: string) => {
-    await markNotificationAsRead(id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-  };
-
-  const handleMarkAllNotificationsRead = async () => {
-    await markAllNotificationsAsRead();
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  };
-
-  const handleSelectDrawerPage = (page: OwnerNavPage) => {
-    setActiveOwnerPage(page);
-    setIsOwnerDrawerOpen(false);
-    if (page === 'add_customer') {
-      setIsAddCustomerOpen(true);
-      setActiveOwnerPage('customers');
-    }
-  };
-
-  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null);
-
-  // Check existing session on mount
+  // Check auth session on mount
   useEffect(() => {
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          const mustReset = session.user.user_metadata?.must_change_password === true;
-          const role = (session.user.user_metadata?.role as UserRole) || 'owner';
+        if (session && session.user) {
+          const mustChange = session.user.user_metadata?.must_change_password === true;
+          const role = session.user.user_metadata?.role || 'owner';
           const user: AuthenticatedUser = {
             id: session.user.id,
             identifier: session.user.email || 'owner',
             name: session.user.user_metadata?.full_name || 'Mess Owner',
             role,
-            mustChangePassword: mustReset
+            mustChangePassword: mustChange
           };
-
-          if (mustReset) {
-            setPendingResetUser(user);
-            setAuthState('SET_NEW_PASSWORD');
+          if (mustChange) {
+            setPasswordResetUser(user);
+            setAuthStep('SET_NEW_PASSWORD');
           } else {
-            setAuthenticatedUser(user);
-            setCurrentRole(role);
+            setCurrentUser(user);
+            setCurrentRole(role as UserRole);
             setCurrentPortal('owner');
-            setAuthState('AUTHENTICATED');
+            setAuthStep('AUTHENTICATED');
           }
           return;
         }
 
-        // Active session check
-        const saved = getSavedSession();
-        if (saved) {
-          if (saved.mustChangePassword) {
-            setPendingResetUser(saved);
-            setAuthState('SET_NEW_PASSWORD');
+        const localUser = getSavedSession();
+        if (localUser) {
+          if (localUser.mustChangePassword) {
+            setPasswordResetUser(localUser);
+            setAuthStep('SET_NEW_PASSWORD');
           } else {
-            setAuthenticatedUser(saved);
-            if (saved.role === 'student') {
+            setCurrentUser(localUser);
+            if (localUser.role === 'student') {
               setCurrentPortal('student');
-              if (saved.studentCustomer) {
-                setStudentPortalCustomer(saved.studentCustomer);
+              if (localUser.studentCustomer) {
+                setSelectedStudentCustomer(localUser.studentCustomer);
               }
             } else {
-              setCurrentRole(saved.role as UserRole);
+              setCurrentRole(localUser.role as UserRole);
               setCurrentPortal('owner');
             }
-            setAuthState('AUTHENTICATED');
+            setAuthStep('AUTHENTICATED');
           }
         } else {
-          setAuthState('PORTAL_CHOICE');
+          setAuthStep('PORTAL_CHOICE');
         }
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_OUT') {
-          setAuthenticatedUser(null);
-          setPendingResetUser(null);
-          setStudentPortalCustomer(null);
+          setCurrentUser(null);
+          setPasswordResetUser(null);
+          setSelectedStudentCustomer(null);
           setCurrentPortal('owner');
-          setAuthState('PORTAL_CHOICE');
+          setAuthStep('PORTAL_CHOICE');
         }
       });
 
@@ -285,190 +280,224 @@ export function App() {
     }
   }, []);
 
-  // Secure Student logout handler (Feature 21)
-  const handleStudentLogout = async (sessionExpired: boolean = false) => {
-    await performSignOut();
-    setAuthenticatedUser(null);
-    setPendingResetUser(null);
-    setStudentPortalCustomer(null);
-    setCurrentPortal('owner');
-    setSelectedPortal('student');
-    if (sessionExpired) {
-      setSessionExpiredNotice('Your session has expired. Please sign in again.');
-    } else {
-      setSessionExpiredNotice(null);
-    }
-    setAuthState('LOGIN');
-    if (typeof window !== 'undefined' && window.history) {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-  };
-
-  // Secure logout handler for Owner / General
   const handleLogout = async () => {
     await performSignOut();
-    setAuthenticatedUser(null);
-    setPendingResetUser(null);
-    setStudentPortalCustomer(null);
+    setCurrentUser(null);
+    setPasswordResetUser(null);
+    setSelectedStudentCustomer(null);
     setCurrentPortal('owner');
-    setAuthState('PORTAL_CHOICE');
-    if (typeof window !== 'undefined' && window.history) {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
+    setAuthStep('PORTAL_CHOICE');
   };
 
-  // Feature 21: Browser back navigation protection for authenticated sessions
-  useEffect(() => {
-    if (authState === 'AUTHENTICATED' && typeof window !== 'undefined' && window.history) {
-      window.history.pushState(null, '', window.location.pathname);
-      const handlePopState = () => {
-        window.history.pushState(null, '', window.location.pathname);
-      };
-      window.addEventListener('popstate', handlePopState);
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
-    }
-  }, [authState]);
-
-  // Real-time synchronization with Supabase on mount
+  // Continuous Full-Stack Live Synchronization between Student & Owner devices
   useEffect(() => {
     let isMounted = true;
+    const stopLiveSync = startLiveSyncEngine();
 
-    // Load existing customers from storage immediately
-    const existingLocal = loadCustomers();
-
-    // Sync from Supabase using official schema structure
-    fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(remoteCusts => {
-      if (isMounted) {
-        setCustomers(prev => {
-          const map = new Map<string, Customer>();
-          // 1. Keep local customers first (so newly added local students are NEVER lost)
-          prev.forEach(c => map.set(c.id, c));
-          existingLocal.forEach(c => {
-            if (!map.has(c.id)) map.set(c.id, c);
-          });
-          // 2. Merge remote customers without deleting local ones
-          if (remoteCusts && remoteCusts.length > 0) {
-            remoteCusts.forEach(c => {
-              if (!map.has(c.id)) {
-                map.set(c.id, c);
-              }
-            });
-          }
-          const merged = Array.from(map.values());
-          saveCustomers(merged);
-          // Sync any local students to Supabase in the background
-          merged.forEach(c => {
-            ensureCustomerSyncedToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
-          });
-          return merged;
-        });
+    const unsubSync = subscribeToSync((state) => {
+      if (!isMounted) return;
+      if (Array.isArray(state.customers)) {
+        setCustomers(state.customers);
+      }
+      if (Array.isArray(state.mealLogs)) {
+        setMealLogs(state.mealLogs);
+      }
+      if (Array.isArray(state.expenses)) {
+        setExpenses(state.expenses);
+      }
+      if (Array.isArray(state.workers)) {
+        setWorkers(state.workers);
+      }
+      if (Array.isArray(state.cleanings)) {
+        setCleanings(state.cleanings);
+      }
+      if (Array.isArray(state.trials)) {
+        setTrials(state.trials);
+      }
+      if (state.rules && typeof state.rules === 'object') {
+        setRules(state.rules);
       }
     });
 
-    syncWithSupabase({
-      onMealLogsSynced: (m) => {
-        if (isMounted) {
-          setMealLogs(m);
-          saveMealLogs(m);
-        }
-      },
-      onExpensesSynced: (e) => {
-        if (isMounted) {
-          setExpenses(e);
-          saveExpenses(e);
-        }
-      }
-    });
-
-    const unsubAttendance = subscribeToAttendanceLogs('63b00e12-a702-492f-bd56-1e260338699f', () => {
-      fetchAttendanceLogsFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(logs => {
-        if (logs && logs.length > 0 && isMounted) {
-          setMealLogs(prev => {
-            const map = new Map<string, MealLog>();
-            logs.forEach(l => map.set(l.id, l));
-            prev.forEach(l => { if (!map.has(l.id)) map.set(l.id, l); });
-            const merged = Array.from(map.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            saveMealLogs(merged);
-            return merged;
-          });
-        }
-      });
+    // Also sync to Supabase where supported
+    loadCustomers().forEach(c => {
+      syncCustomerToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
     });
 
     return () => {
       isMounted = false;
-      unsubAttendance();
+      stopLiveSync();
+      unsubSync();
     };
   }, []);
 
-  // Save changes to localStorage whenever state updates
-  useEffect(() => {
-    saveCustomers(customers);
-  }, [customers]);
+  // Save to localStorage when state changes
+  useEffect(() => { saveCustomers(customers); }, [customers]);
+  useEffect(() => { saveMealLogs(mealLogs); }, [mealLogs]);
+  useEffect(() => { saveExpenses(expenses); }, [expenses]);
+  useEffect(() => { saveWorkers(workers); }, [workers]);
+  useEffect(() => { saveCleanings(cleanings); }, [cleanings]);
+  useEffect(() => { saveBusinessRules(rules); }, [rules]);
+  useEffect(() => { saveTrials(trials); }, [trials]);
 
+  // Sync real-time trial registration events across components and tabs
   useEffect(() => {
-    saveMealLogs(mealLogs);
-  }, [mealLogs]);
+    let isMounted = true;
+    const reloadTrialsFromDb = () => {
+      fetchTrialVisitorsFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(data => {
+        if (isMounted && data) {
+          setTrials(data);
+          saveTrials(data);
+        }
+      });
+      setMealLogs(loadMealLogs());
+    };
 
-  useEffect(() => {
-    saveExpenses(expenses);
-  }, [expenses]);
+    // Initial load from Supabase database
+    reloadTrialsFromDb();
 
-  useEffect(() => {
-    saveWorkers(workers);
-  }, [workers]);
+    window.addEventListener('morya_trial_updated', reloadTrialsFromDb);
+    window.addEventListener('storage', reloadTrialsFromDb);
 
-  useEffect(() => {
-    saveCleanings(cleanings);
-  }, [cleanings]);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('morya_trial_updated', reloadTrialsFromDb);
+      window.removeEventListener('storage', reloadTrialsFromDb);
+    };
+  }, []);
 
+  // Keep selected student synced
   useEffect(() => {
-    saveRules(rules);
-  }, [rules]);
-
-  useEffect(() => {
-    saveTrials(trials);
-  }, [trials]);
-
-  // Keep student portal customer in sync
-  useEffect(() => {
-    if (studentPortalCustomer) {
-      const updated = customers.find(c => c.id === studentPortalCustomer.id);
-      if (updated) {
-        setStudentPortalCustomer(updated);
-      }
+    if (selectedStudentCustomer) {
+      const updated = customers.find(c => c.id === selectedStudentCustomer.id);
+      if (updated) setSelectedStudentCustomer(updated);
     }
   }, [customers]);
 
-  // Handler: Add Customer
+  // Load notifications on mount & subscribe to changes
+  useEffect(() => {
+    let isMounted = true;
+
+    const reloadNotifs = () => {
+      fetchOwnerNotifications('63b00e12-a702-492f-bd56-1e260338699f').then(data => {
+        if (isMounted) {
+          setNotifications(data || []);
+          setIsNotificationsLoading(false);
+        }
+      });
+    };
+
+    setIsNotificationsLoading(true);
+    reloadNotifs();
+
+    const handleLocalNotif = (e: any) => {
+      if (e.detail && isMounted) {
+        setNotifications(prev => {
+          if (prev.some(n => n.id === e.detail.id)) return prev;
+          return [e.detail, ...prev];
+        });
+      }
+    };
+
+    // Cross-tab broadcast listener
+    const channel = getNotifBroadcastChannel();
+    const handleBroadcast = (ev: MessageEvent) => {
+      if (ev.data?.type === 'OWNER_NOTIF' && ev.data.data && isMounted) {
+        setNotifications(prev => {
+          if (prev.some(n => n.id === ev.data.data.id)) return prev;
+          return [ev.data.data, ...prev];
+        });
+      } else if (isMounted) {
+        reloadNotifs();
+      }
+    };
+    if (channel) {
+      channel.addEventListener('message', handleBroadcast);
+    }
+
+    window.addEventListener('morya_notification_created', handleLocalNotif);
+    window.addEventListener('morya_payment_created', reloadNotifs);
+    window.addEventListener('morya_complaints_updated', reloadNotifs);
+    window.addEventListener('morya_leave_updated', reloadNotifs);
+    window.addEventListener('storage', reloadNotifs);
+
+    // Periodic 5s polling for background cross-device updates
+    const pollInterval = setInterval(() => {
+      if (isMounted) {
+        reloadNotifs();
+      }
+    }, 5000);
+
+    const unsubRealtime = subscribeToOwnerNotificationsRealtime((newNotif) => {
+      if (isMounted) {
+        setNotifications(prev => {
+          if (prev.some(n => n.id === newNotif.id)) return prev;
+          return [newNotif, ...prev];
+        });
+      }
+    }, '63b00e12-a702-492f-bd56-1e260338699f');
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+      if (channel) {
+        channel.removeEventListener('message', handleBroadcast);
+      }
+      window.removeEventListener('morya_notification_created', handleLocalNotif);
+      window.removeEventListener('morya_payment_created', reloadNotifs);
+      window.removeEventListener('morya_complaints_updated', reloadNotifs);
+      window.removeEventListener('morya_leave_updated', reloadNotifs);
+      window.removeEventListener('storage', reloadNotifs);
+      unsubRealtime();
+    };
+  }, []);
+
+  // When notification modal opens, immediately refresh for freshest notifications
+  useEffect(() => {
+    if (isNotificationsOpen) {
+      setIsNotificationsLoading(true);
+      fetchOwnerNotifications('63b00e12-a702-492f-bd56-1e260338699f').then(data => {
+        setNotifications(data || []);
+        setIsNotificationsLoading(false);
+      });
+    }
+  }, [isNotificationsOpen]);
+
+  // Handlers
   const handleAddCustomer = (newCustomer: Customer) => {
-    const updated = [newCustomer, ...customers];
+    removeDeletedCustomerId(newCustomer.id);
+    const updated = [newCustomer, ...customers.filter(c => c.id !== newCustomer.id)];
     setCustomers(updated);
     saveCustomers(updated);
-    ensureCustomerSyncedToSupabase(newCustomer, '63b00e12-a702-492f-bd56-1e260338699f');
+    pushSyncToServer({ customers: updated });
+    syncCustomerToSupabase(newCustomer, '63b00e12-a702-492f-bd56-1e260338699f');
   };
 
-  // Handler: Delete Customer
-  const handleDeleteCustomer = (id: string) => {
-    const updated = customers.filter(c => c.id !== id);
+  const handleDeleteCustomer = (customerId: string) => {
+    saveDeletedCustomerId(customerId);
+    const updated = customers.filter(c => c.id !== customerId);
     setCustomers(updated);
     saveCustomers(updated);
+    pushSyncToServer({ customers: updated, deletedCustomerIds: [customerId] as any });
+    deleteCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', customerId);
   };
 
-  // Handler: Clear All Customers
   const handleClearAllCustomers = () => {
+    const allIds = customers.map(c => c.id);
+    saveDeletedCustomerIds(allIds);
     setCustomers([]);
     saveCustomers([]);
+    pushSyncToServer({ customers: [], deletedCustomerIds: allIds as any });
+    allIds.forEach(id => {
+      deleteCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', id);
+    });
   };
 
-  // Handler: Record Meal Scan
   const handleRecordMeal = (
-    customerId: string, 
-    scanStatus: ScanEligibility, 
-    reason: string, 
-    mealType: MealType, 
+    customerId: string,
+    status: ScanEligibility,
+    reason: string,
+    mealType: MealType,
     overrideNotes?: string
   ) => {
     const cust = customers.find(c => c.id === customerId);
@@ -479,100 +508,105 @@ export function App() {
       mealType,
       date: getTodayString(),
       timestamp: new Date().toISOString(),
-      scanStatus,
+      scanStatus: status,
       reason,
       overrideNotes
     };
-
-    const updatedLogs = [newLog, ...mealLogs];
-    setMealLogs(updatedLogs);
-    saveMealLogs(updatedLogs);
+    const updated = [newLog, ...mealLogs];
+    setMealLogs(updated);
+    saveMealLogs(updated);
+    recordAttendanceToServer({
+      customerId,
+      customerName: newLog.customerName,
+      mealType,
+      scanStatus: status,
+      reason,
+      overrideNotes
+    });
+    pushSyncToServer({ mealLogs: updated });
     syncMealLogToSupabase(newLog);
   };
 
-  // Handler: Renew Customer
-  const handleRenewCustomer = (
-    customerId: string, 
-    newStart: string, 
-    newEnd: string, 
-    amount: number, 
-    paid: number, 
+  const handleRecordManualAttendance = (
+    customerId: string,
+    shift: MealType,
+    reason: string
+  ): { success: boolean; message: string } => {
+    const cust = customers.find(c => c.id === customerId || c.phone === customerId);
+    if (!cust) {
+      return { success: false, message: `No student found with ID/phone "${customerId}".` };
+    }
+    handleRecordMeal(cust.id, 'ALLOW', reason || 'Manual Attendance Confirmed by Owner', shift, `[MANUAL_ENTRY] ${reason}`);
+    return { success: true, message: `Attendance marked successfully for ${cust.name}.` };
+  };
+
+  const handleRenew = (
+    customerId: string,
+    newStartDate: string,
+    newEndDate: string,
+    amount: number,
+    paidAmount: number,
     notes?: string
   ) => {
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
-      const renewalEntry = {
+      const renewalRecord = {
         id: `rn-${Date.now()}`,
-        newStartDate: newStart,
-        newEndDate: newEnd,
+        newStartDate,
+        newEndDate,
         planName: c.planType,
         amount,
-        paidAmount: paid,
+        paidAmount,
         date: getTodayString(),
         paymentMethod: 'cash' as const,
         renewedBy: 'Owner',
         notes: notes || 'Subscription Renewal'
       };
-
-      const newBalance = Math.max(0, (c.balance || 0) + (amount - paid));
-
+      const newBalance = Math.max(0, (c.balance || 0) + (amount - paidAmount));
       const updatedCustomer: Customer = {
         ...c,
-        startDate: newStart,
-        endDate: newEnd,
-        status: 'active' as const,
+        startDate: newStartDate,
+        endDate: newEndDate,
+        status: 'active',
         balance: newBalance,
-        renewals: [...(c.renewals || []), renewalEntry]
+        renewals: [...(c.renewals || []), renewalRecord]
       };
-
-      syncCustomerToSupabase(updatedCustomer);
+      updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', c.id, updatedCustomer);
       return updatedCustomer;
     });
-
     setCustomers(updated);
     saveCustomers(updated);
   };
 
-  // Handler: Collect Payment
-  const handleRecordPayment = (
-    customerId: string, 
-    amount: number, 
-    mode: 'cash' | 'upi' | 'bank_transfer', 
-    notes?: string
-  ) => {
+  const handleRecordPayment = (customerId: string, amount: number, mode: 'cash' | 'upi' | 'bank_transfer', notes?: string) => {
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
-      const paymentEntry = {
+      const paymentRecord = {
         id: `pm-${Date.now()}`,
         date: getTodayString(),
         amount,
         mode,
         notes: notes || 'Fee balance cleared'
       };
-
       const newBalance = Math.max(0, c.balance - amount);
       const newPaid = c.paidAmount + amount;
-
       const updatedCustomer: Customer = {
         ...c,
         balance: newBalance,
         paidAmount: newPaid,
-        payments: [...(c.payments || []), paymentEntry]
+        payments: [...(c.payments || []), paymentRecord]
       };
-
-      syncCustomerToSupabase(updatedCustomer);
+      updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', c.id, updatedCustomer);
       return updatedCustomer;
     });
-
     setCustomers(updated);
     saveCustomers(updated);
   };
 
-  // Handler: Apply Penalty
   const handleApplyPenalty = (customerId: string, amount: number, reason: string) => {
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
-      const penaltyEntry = {
+      const pen = {
         id: `pn-${Date.now()}`,
         date: getTodayString(),
         amount,
@@ -580,48 +614,41 @@ export function App() {
         status: 'pending' as const,
         recordedBy: 'Owner'
       };
-
       const updatedCustomer: Customer = {
         ...c,
         balance: c.balance + amount,
         penaltyAmount: (c.penaltyAmount || 0) + amount,
         penaltyReason: reason,
         penaltyPaid: false,
-        penalties: [...(c.penalties || []), penaltyEntry]
+        penalties: [...(c.penalties || []), pen]
       };
-
-      syncCustomerToSupabase(updatedCustomer);
+      updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', c.id, updatedCustomer);
       return updatedCustomer;
     });
-
     setCustomers(updated);
     saveCustomers(updated);
   };
 
-  // Handler: Add Expense
-  const handleAddExpense = (expense: Expense) => {
-    const updated = [expense, ...expenses];
+  const handleAddExpense = (newExpense: Expense) => {
+    const updated = [newExpense, ...expenses];
     setExpenses(updated);
     saveExpenses(updated);
-    syncExpenseToSupabase(expense);
+    syncExpenseToSupabase(newExpense);
   };
 
-  // Handler: Delete Expense
   const handleDeleteExpense = (id: string) => {
     const updated = expenses.filter(e => e.id !== id);
     setExpenses(updated);
     saveExpenses(updated);
   };
 
-  // Handler: Add Worker
-  const handleAddWorker = (worker: Worker) => {
-    const updated = [worker, ...workers];
+  const handleAddWorker = (newWorker: Worker) => {
+    const updated = [newWorker, ...workers];
     setWorkers(updated);
     saveWorkers(updated);
   };
 
-  // Handler: Update Worker Attendance
-  const handleUpdateWorkerAttendance = (workerId: string, date: string, status: 'present' | 'absent' | 'half_day') => {
+  const handleUpdateWorkerAttendance = (workerId: string, date: string, status: 'present' | 'absent' | 'half_day' | 'leave') => {
     const updated = workers.map(w => {
       if (w.id !== workerId) return w;
       return {
@@ -636,54 +663,47 @@ export function App() {
     saveWorkers(updated);
   };
 
-  // Handler: Delete Worker
   const handleDeleteWorker = (id: string) => {
     const updated = workers.filter(w => w.id !== id);
     setWorkers(updated);
     saveWorkers(updated);
   };
 
-  // Handler: Add Cleaning
-  const handleAddCleaning = (cleaning: CleaningInspection) => {
-    const updated = [cleaning, ...cleanings];
+  const handleAddCleaning = (newCleaning: CleaningInspection) => {
+    const updated = [newCleaning, ...cleanings];
     setCleanings(updated);
     saveCleanings(updated);
   };
 
-  // Handler: Save Rules
-  const handleSaveRules = (updatedRules: BusinessRulesConfig) => {
-    setRules(updatedRules);
-    saveRules(updatedRules);
+  const handleSaveRules = (newRules: BusinessRulesConfig) => {
+    setRules(newRules);
+    saveBusinessRules(newRules);
   };
 
-  // Handler: Add Trial
-  const handleAddTrial = (trial: TrialVisitor) => {
-    const updated = [trial, ...trials];
+  const handleAddTrial = (newTrial: TrialVisitor) => {
+    const updated = [newTrial, ...trials];
     setTrials(updated);
     saveTrials(updated);
+    pushSyncToServer({ trials: updated });
   };
 
-  // Handler: Convert Trial to Customer
   const handleConvertTrialToCustomer = (trial: TrialVisitor) => {
-    const today = getTodayString();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 30);
-
-    const standardFee = trial.gender === 'female' 
-      ? (rules.femaleFullRate || 2500) 
-      : (rules.maleFullRate || 3000);
+    const startDate = getTodayString();
+    const end = new Date();
+    end.setDate(end.getDate() + 30);
+    const fee = trial.gender === 'female' ? rules.femaleFullRate || 2500 : rules.maleFullRate || 3000;
 
     const newCustomer: Customer = {
       id: `MM-${new Date().getFullYear()}-${String(customers.length + 1).padStart(3, '0')}`,
       name: trial.name,
       phone: trial.phone,
       gender: trial.gender,
-      startDate: today,
-      endDate: endDate.toISOString().split('T')[0],
+      startDate,
+      endDate: end.toISOString().split('T')[0],
       planType: 'monthly_2meals',
-      totalAmount: standardFee,
-      paidAmount: trial.amountPaid, // credit trial payment towards monthly fee!
-      balance: Math.max(0, standardFee - trial.amountPaid),
+      totalAmount: fee,
+      paidAmount: trial.amountPaid,
+      balance: Math.max(0, fee - trial.amountPaid),
       status: 'active',
       collegeOrWork: trial.college,
       qrToken: `MORYA-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
@@ -691,110 +711,248 @@ export function App() {
       createdAt: new Date().toISOString()
     };
 
-    // Mark trial converted
     const updatedTrials = trials.map(t => t.id === trial.id ? { ...t, convertedToMonthly: true } : t);
     setTrials(updatedTrials);
     saveTrials(updatedTrials);
+    pushSyncToServer({ trials: updatedTrials });
 
     handleAddCustomer(newCustomer);
     setCurrentTab('customers');
   };
 
-  // Handler: Student requests vacation leave
   const handleRequestLeave = (customerId: string, startDate: string, endDate: string, reason: string) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
+    const targetCustomer = customers.find(c => c.id === customerId);
+    const newLeaveId = `lv-${Date.now()}`;
+
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
-      const leaveEntry = {
-        id: `lv-${Date.now()}`,
+      const newLeave = {
+        id: newLeaveId,
         startDate,
         endDate,
         days,
         reason,
-        approved: false, // Pending owner approval
-        createdAt: new Date().toISOString()
+        approved: false,
+        status: 'pending' as const,
+        createdAt: new Date().toISOString(),
+        requestedAt: new Date().toISOString()
       };
-
-      const updatedCustomer = {
+      const updatedCust: Customer = {
         ...c,
-        leaves: [...(c.leaves || []), leaveEntry]
+        leaves: [...(c.leaves || []), newLeave]
       };
-
-      syncCustomerToSupabase(updatedCustomer);
-      return updatedCustomer;
+      updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', c.id, updatedCust);
+      return updatedCust;
     });
-
     setCustomers(updated);
     saveCustomers(updated);
+    submitLeaveRequestToServer({
+      customerId,
+      startDate,
+      endDate,
+      days,
+      reason
+    });
+    pushSyncToServer({ customers: updated });
+
+    // Ensure owner notification is created
+    createOwnerNotification({
+      type: 'leave_request',
+      title: 'Student Leave Request',
+      message: `${targetCustomer?.name || 'Student'} requested leave from ${startDate} to ${endDate} (${days} days). Reason: ${reason}`,
+      customerId,
+      customerName: targetCustomer?.name,
+      relatedRecordId: newLeaveId,
+      priority: 'high'
+    });
   };
 
-  // Handler: Owner Approves Leave
   const handleApproveLeave = (customerId: string, leaveId: string, days: number) => {
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
-      const oldEnd = new Date(c.endDate);
-      oldEnd.setDate(oldEnd.getDate() + days);
-      const newEndDate = oldEnd.toISOString().split('T')[0];
+      const currentEnd = new Date(c.endDate);
+      currentEnd.setDate(currentEnd.getDate() + days);
+      const newEndDate = currentEnd.toISOString().split('T')[0];
 
-      const updatedLeaves = (c.leaves || []).map(l => l.id === leaveId ? { ...l, approved: true } : l);
-
-      const updatedCustomer: Customer = {
+      const updatedLeaves = (c.leaves || []).map(l => l.id === leaveId ? { ...l, approved: true, status: 'approved' as const } : l);
+      const updatedCust: Customer = {
         ...c,
         endDate: newEndDate,
         leaves: updatedLeaves
       };
-
-      syncCustomerToSupabase(updatedCustomer);
-      return updatedCustomer;
+      updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', c.id, updatedCust);
+      return updatedCust;
     });
-
     setCustomers(updated);
     saveCustomers(updated);
+    actionLeaveOnServer({ action: 'approve', customerId, leaveId, approvedBy: 'Owner' });
+    pushSyncToServer({ customers: updated });
+
+    // Notify student instantly in student app notification box
+    sendNotificationToStudent({
+      customerId,
+      title: 'Leave Approved! 🎉',
+      message: `Your leave application for ${days} day(s) has been approved. Your meal pass validity is extended to reflect your absence.`,
+      type: 'leave_approved',
+      priority: 'normal'
+    });
   };
 
-  // Handler: Owner Rejects Leave
   const handleRejectLeave = (customerId: string, leaveId: string) => {
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
-      const updatedLeaves = (c.leaves || []).filter(l => l.id !== leaveId);
-      const updatedCustomer = {
+      const updatedLeaves = (c.leaves || []).map(l => l.id === leaveId ? { ...l, status: 'rejected' as const, approved: false } : l);
+      const updatedCust: Customer = {
         ...c,
         leaves: updatedLeaves
       };
-      syncCustomerToSupabase(updatedCustomer);
-      return updatedCustomer;
+      updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', c.id, updatedCust);
+      return updatedCust;
     });
-
     setCustomers(updated);
     saveCustomers(updated);
+    actionLeaveOnServer({ action: 'reject', customerId, leaveId, approvedBy: 'Owner' });
+    pushSyncToServer({ customers: updated });
+
+    // Notify student instantly in student app notification box
+    sendNotificationToStudent({
+      customerId,
+      title: 'Leave Request Update',
+      message: `Your leave application was reviewed and could not be approved by the mess management.`,
+      type: 'leave_rejected',
+      priority: 'urgent'
+    });
   };
 
-  // Helper: Create a sample leave request for instant testing
   const handleCreateTestLeave = () => {
     if (customers.length === 0) {
       alert('Please register at least one member first to test the leave desk.');
       return;
     }
-    const target = customers[0];
+    const sampleCustomer = customers[0];
     const today = getTodayString();
-    const end = new Date();
-    end.setDate(end.getDate() + 4);
-    const endStr = end.toISOString().split('T')[0];
+    const d = new Date();
+    d.setDate(d.getDate() + 4);
+    const endStr = d.toISOString().split('T')[0];
 
-    handleRequestLeave(target.id, today, endStr, 'Diwali Festival & Semester Vacation Break');
+    handleRequestLeave(sampleCustomer.id, today, endStr, 'Diwali Festival & Semester Vacation Break');
     setCurrentTab('dashboard');
   };
 
-  // Leaves pending count
+  const handleRegisterTrial = (record: {
+    id: string;
+    fullName: string;
+    phone: string;
+    gender: Gender;
+    college?: string;
+    mealType: MealType;
+    foodItem: string;
+    amountPaid: number;
+    paymentMode: 'upi' | 'cash';
+    date: string;
+    tokenNumber: string;
+    notes?: string;
+  }) => {
+    // 1. Add to TrialVisitor list
+    const newTrial: TrialVisitor = {
+      id: record.id,
+      name: record.fullName,
+      phone: record.phone,
+      gender: record.gender,
+      college: record.college || '',
+      mealType: record.mealType,
+      foodItem: record.foodItem,
+      visitType: '1_day_trial',
+      date: record.date,
+      amountPaid: record.amountPaid,
+      convertedToMonthly: false,
+      notes: `Token: #${record.tokenNumber}; Food: ${record.foodItem}; Shift: ${record.mealType.toUpperCase()}; Paid: ₹${record.amountPaid} (${record.paymentMode.toUpperCase()}); ${record.notes || ''}`
+    };
+    const updatedTrials = [newTrial, ...trials];
+    setTrials(updatedTrials);
+    saveTrials(updatedTrials);
+
+    // 2. Sync to Supabase trial student table
+    addTrialStudentInSupabase({
+      fullName: record.fullName,
+      phone: record.phone,
+      startDate: record.date,
+      endDate: record.date,
+      mealType: record.mealType === 'lunch' ? 'lunch_only' : 'dinner_only',
+      mealLimit: 1,
+      amountPaid: record.amountPaid,
+      notes: `TOKEN:${record.tokenNumber};ITEM:${record.foodItem};PAID:${record.amountPaid};MODE:${record.paymentMode};${record.notes || ''}`
+    }).catch(err => console.warn('Supabase trial student sync note:', err));
+
+    // 3. Create a meal log record so dashboard and meal counts update in real-time
+    const newMealLog: MealLog = {
+      id: `ml-trial-${Date.now()}`,
+      customerId: record.id,
+      customerName: `[Trial] ${record.fullName}`,
+      gender: record.gender,
+      mealType: record.mealType,
+      date: record.date,
+      timestamp: new Date().toISOString(),
+      scanStatus: 'ALLOW',
+      reason: `Trial Self-Registration (#${record.tokenNumber}) — ₹${record.amountPaid} (${record.paymentMode.toUpperCase()})`
+    };
+    const updatedMealLogs = [newMealLog, ...mealLogs];
+    setMealLogs(updatedMealLogs);
+    saveMealLogs(updatedMealLogs);
+
+    // 4. Create an Owner notification for real-time alert
+    const notif = {
+      id: `notif-trial-${Date.now()}`,
+      type: 'trial_registration',
+      title: 'New Trial Student Checked In! 🎫',
+      message: `${record.fullName} (${record.phone}) checked in for ${record.mealType.toUpperCase()} trial — ₹${record.amountPaid} (${record.paymentMode.toUpperCase()}) Token: #${record.tokenNumber}`,
+      customerId: record.id,
+      customerName: record.fullName,
+      priority: 'high',
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+    createOwnerNotification(notif as any);
+
+    // 5. Push to central server so Owner app sees the trial student immediately
+    pushSyncToServer({
+      trials: updatedTrials,
+      mealLogs: updatedMealLogs,
+      notifications: [notif as any, ...notifications]
+    });
+  };
+
   const pendingLeavesCount = customers.flatMap(c => c.leaves || []).filter(l => !l.approved).length;
 
+  // Direct public self check-in view when QR is scanned with phone camera (?portal=trial)
+  if (isTrialScanMode) {
+    return (
+      <TrialStudentPortalView
+        rules={rules}
+        onRegisterTrial={handleRegisterTrial}
+        onExit={() => {
+          if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('portal');
+            url.searchParams.delete('view');
+            url.searchParams.delete('mode');
+            window.location.hash = '';
+            window.history.replaceState({}, '', url.pathname);
+          }
+          setIsTrialScanMode(false);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-slate-900 font-sans antialiased flex flex-col selection:bg-orange-100 selection:text-orange-900">
-      {/* Ganpati & Brand Splash Screen */}
+    <div className="min-h-screen bg-[#FBFBFC] text-slate-900 font-sans antialiased flex flex-col selection:bg-orange-600 selection:text-white">
+      {/* Ganpati auspicious start screen */}
       {showSplash && (
         <GanpatiSplash
           onFinish={() => setShowSplash(false)}
@@ -804,84 +962,91 @@ export function App() {
         />
       )}
 
-      {/* 1. STARTING SCREEN & AUTHENTICATION FLOW */}
-      {!showSplash && authState === 'PORTAL_CHOICE' && (
+      {/* Auth Flow 1: Portal Choice */}
+      {!showSplash && authStep === 'PORTAL_CHOICE' && (
         <PortalSelectionScreen
-          onSelectPortal={(portal) => {
-            setSelectedPortal(portal);
-            setAuthState('LOGIN');
+          onSelectPortal={(selected) => {
+            setPortal(selected);
+            setAuthStep('LOGIN');
           }}
           messName={rules.messName}
           messSubtitle={rules.messSubtitle}
         />
       )}
 
-      {/* 2. LOGIN SCREEN */}
-      {!showSplash && authState === 'LOGIN' && (
+      {/* Auth Flow 2: Login */}
+      {!showSplash && authStep === 'LOGIN' && (
         <LoginScreen
-          portal={selectedPortal}
-          onBack={() => setAuthState('PORTAL_CHOICE')}
-          onRequirePasswordReset={(user) => {
-            setPendingResetUser(user);
-            setAuthState('SET_NEW_PASSWORD');
+          portal={portal}
+          onBack={() => setAuthStep('PORTAL_CHOICE')}
+          onRequirePasswordReset={(usr) => {
+            setPasswordResetUser(usr);
+            setAuthStep('SET_NEW_PASSWORD');
           }}
-          onAuthenticated={(user) => {
-            setAuthenticatedUser(user);
-            setSessionExpiredNotice(null);
-            if (user.role === 'student') {
-              if (user.studentCustomer) {
-                setStudentPortalCustomer(user.studentCustomer);
+          onAuthenticated={(usr) => {
+            setCurrentUser(usr);
+            if (usr.role === 'student') {
+              if (usr.studentCustomer) {
+                setSelectedStudentCustomer(usr.studentCustomer);
               }
               setCurrentPortal('student');
             } else {
               setCurrentPortal('owner');
-              setCurrentRole(user.role as UserRole);
+              setCurrentRole(usr.role as UserRole);
             }
-            setAuthState('AUTHENTICATED');
+            setAuthStep('AUTHENTICATED');
           }}
           allCustomers={customers}
           messName={rules.messName}
-          sessionExpiredNotice={sessionExpiredNotice}
         />
       )}
 
-      {/* 3. SET NEW PERMANENT PASSWORD SCREEN (BLOCKS DASHBOARD ACCESS) */}
-      {!showSplash && authState === 'SET_NEW_PASSWORD' && pendingResetUser && (
+      {/* Auth Flow 3: Set New Password */}
+      {!showSplash && authStep === 'SET_NEW_PASSWORD' && passwordResetUser && (
         <SetNewPasswordScreen
-          user={pendingResetUser}
-          onPasswordSetSuccessfully={(updatedUser) => {
-            setPendingResetUser(null);
-            setAuthenticatedUser(updatedUser);
-            if (updatedUser.role === 'student') {
-              if (updatedUser.studentCustomer) {
-                setStudentPortalCustomer(updatedUser.studentCustomer);
+          user={passwordResetUser}
+          onPasswordSetSuccessfully={(usr) => {
+            setPasswordResetUser(null);
+            setCurrentUser(usr);
+            if (usr.role === 'student') {
+              if (usr.studentCustomer) {
+                setSelectedStudentCustomer(usr.studentCustomer);
               }
               setCurrentPortal('student');
             } else {
               setCurrentPortal('owner');
-              setCurrentRole(updatedUser.role as UserRole);
+              setCurrentRole(usr.role as UserRole);
             }
-            setAuthState('AUTHENTICATED');
+            setAuthStep('AUTHENTICATED');
           }}
           onCancel={handleLogout}
           messName={rules.messName}
         />
       )}
 
-      {/* 4. AUTHENTICATED ACCESS ONLY */}
-      {!showSplash && authState === 'AUTHENTICATED' && (
-        currentPortal === 'student' && (studentPortalCustomer || authenticatedUser?.studentCustomer) ? (
+      {/* Authenticated State */}
+      {!showSplash && authStep === 'AUTHENTICATED' && (
+        currentPortal === 'student' && (selectedStudentCustomer || currentUser?.studentCustomer) ? (
           <StudentPortalView
-            customer={studentPortalCustomer || authenticatedUser!.studentCustomer!}
-            allCustomers={[studentPortalCustomer || authenticatedUser!.studentCustomer!]}
-            mealLogs={mealLogs.filter(m => m.customerId === (studentPortalCustomer?.id || authenticatedUser?.studentCustomer?.id))}
-            onSwitchCustomer={(c) => setStudentPortalCustomer(c)}
-            onExitPortal={() => handleStudentLogout(false)}
+            customer={selectedStudentCustomer || (currentUser?.studentCustomer as Customer)}
+            allCustomers={[selectedStudentCustomer || (currentUser?.studentCustomer as Customer)]}
+            mealLogs={mealLogs.filter(m => m.customerId === (selectedStudentCustomer?.id || currentUser?.studentCustomer?.id))}
+            onSwitchCustomer={(c) => setSelectedStudentCustomer(c)}
+            onExitPortal={handleLogout}
             onRequestLeave={handleRequestLeave}
             onMealLogged={(newLog) => {
               setMealLogs(prev => {
-                const updated = [newLog, ...prev.filter(m => m.id !== newLog.id)];
+                const updated = [newLog, ...prev.filter(l => l.id !== newLog.id)];
                 saveMealLogs(updated);
+                recordAttendanceToServer({
+                  customerId: newLog.customerId,
+                  customerName: newLog.customerName,
+                  mealType: newLog.mealType,
+                  scanStatus: newLog.scanStatus,
+                  reason: newLog.reason,
+                  overrideNotes: newLog.overrideNotes
+                });
+                pushSyncToServer({ mealLogs: updated });
                 return updated;
               });
             }}
@@ -890,599 +1055,820 @@ export function App() {
           />
         ) : (
           <>
-            {/* OWNER / MANAGER APP VIEW */}
             <div className="flex-1 flex flex-col">
-            {/* Top Sticky Header with Hamburger & Notification Bell */}
-            <Navigation
-              currentTab={currentTab}
-              onTabChange={(tab) => {
-                setCurrentTab(tab);
-                if (tab === 'dashboard') setActiveOwnerPage('dashboard');
-                else if (tab === 'customers') setActiveOwnerPage('customers');
-                else if (tab === 'meals') setActiveOwnerPage('meals' as any);
-                else if (tab === 'payments') setActiveOwnerPage('billing_payments');
-                else if (tab === 'expenses') setActiveOwnerPage('expense_tracker');
-                else if (tab === 'workers') setActiveOwnerPage('staff_management');
-                else if (tab === 'reports') setActiveOwnerPage('business_summary');
+              <Navigation
+                currentTab={currentTab}
+                onTabChange={setCurrentTab}
+                currentRole={currentRole}
+                onRoleChange={setCurrentRole}
+                onOpenDrawer={() => setIsDrawerOpen(true)}
+                onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
+                onOpenTrialQr={() => setIsTrialQrModalOpen(true)}
+                onOpenPredictCampaignResults={() => setIsPredictCampaignOpen(true)}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                messName={rules.messName}
+                pendingLeavesCount={pendingLeavesCount}
+                onLogout={handleLogout}
+                userEmail={currentUser?.identifier}
+                onOpenNotifications={() => setIsNotificationsOpen(true)}
+                unreadNotificationsCount={notifications.filter(n => !n.isRead).length}
+              />
+
+              {/* Owner Drawer Navigation Menu */}
+              <OwnerDrawerMenu
+                isOpen={isDrawerOpen}
+                onClose={() => setIsDrawerOpen(false)}
+                currentTab={currentTab}
+                onSelectTab={(tab) => {
+                  if (tab === 'add_customer') {
+                    setIsAddCustomerOpen(true);
+                  } else if (tab === 'settings') {
+                    setCurrentTab('settings');
+                  } else if (tab === 'trial_qr') {
+                    setIsTrialQrModalOpen(true);
+                  } else if (tab === 'trial_students') {
+                    setCurrentTab('trial_students');
+                  } else if (tab === 'scanner') {
+                    setCurrentTab('attendance');
+                    setIsScannerOpen(true);
+                  } else if (tab === 'kitchen_predictor') {
+                    setIsKitchenEstimatorOpen(true);
+                  } else if (tab === 'campaign_participants') {
+                    setIsCampaignParticipantsOpen(true);
+                  } else if (tab === 'predict_campaign_winner') {
+                    setIsPredictCampaignOpen(true);
+                  } else {
+                    setCurrentTab(tab);
+                  }
+                }}
+                messName={rules.messName}
+                pendingLeavesCount={pendingLeavesCount}
+                onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
+                onOpenTrialQr={() => setIsTrialQrModalOpen(true)}
+                onOpenKitchenEstimator={() => setIsKitchenEstimatorOpen(true)}
+                onOpenPredictCampaignResults={() => setIsPredictCampaignOpen(true)}
+                onOpenCampaignParticipants={() => setIsCampaignParticipantsOpen(true)}
+                onOpenWhatsAppDuesBot={() => setIsWhatsAppDuesBotOpen(true)}
+                onOpenAttendanceIntegrity={() => setIsAttendanceIntegrityOpen(true)}
+                onOpenMaharajCookSheet={() => setIsMaharajCookSheetOpen(true)}
+                onOpenMessPnl={() => setIsMessPnlOpen(true)}
+                onOpenDailyProfitDigest={() => setIsDailyProfitDigestOpen(true)}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                onLogout={handleLogout}
+                userEmail={currentUser?.identifier}
+              />
+
+              <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+                {currentTab === 'dashboard' && (
+                  <DashboardView
+                    customers={customers}
+                    mealLogs={mealLogs}
+                    expenses={expenses}
+                    workers={workers}
+                    cleanings={cleanings}
+                    rules={rules}
+                    currentRole={currentRole}
+                    onOpenScanner={() => setIsScannerOpen(true)}
+                    onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
+                    onOpenTrialQr={() => setIsTrialQrModalOpen(true)}
+                    onOpenKitchenEstimator={() => setIsKitchenEstimatorOpen(true)}
+                    onOpenPredictCampaignResults={() => setIsPredictCampaignOpen(true)}
+                    onOpenCampaignParticipants={() => setIsCampaignParticipantsOpen(true)}
+                    onOpenWhatsAppDuesBot={() => setIsWhatsAppDuesBotOpen(true)}
+                    onOpenAttendanceIntegrity={() => setIsAttendanceIntegrityOpen(true)}
+                    onOpenMaharajCookSheet={() => setIsMaharajCookSheetOpen(true)}
+                    onOpenMessPnl={() => setIsMessPnlOpen(true)}
+                    onOpenDailyProfitDigest={() => setIsDailyProfitDigestOpen(true)}
+                    onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+                    onOpenAddExpense={() => setCurrentTab('expenses')}
+                    onOpenCardPrint={(c) => setSelectedCardPrintCustomer(c)}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                    onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                    onOpenSettings={() => setIsSettingsOpen(true)}
+                    onNavigateTab={(tab) => {
+                      if (tab === 'meals' || tab === 'attendance') {
+                        setCurrentTab('attendance');
+                      } else if (tab === 'add_customer') {
+                        setIsAddCustomerOpen(true);
+                      } else {
+                        setCurrentTab(tab);
+                      }
+                    }}
+                    onApproveLeave={handleApproveLeave}
+                    onRejectLeave={handleRejectLeave}
+                    onCreateTestLeave={handleCreateTestLeave}
+                    onOpenLeaveApprovalsTab={() => {
+                      setReportsInitialTab('leave_approvals');
+                      setCurrentTab('reports');
+                    }}
+                  />
+                )}
+
+                {currentTab === 'customers' && (
+                  <CustomersListView
+                    customers={customers}
+                    onOpenAddModal={() => setIsAddCustomerOpen(true)}
+                    onOpenCardPrint={(c) => setSelectedCardPrintCustomer(c)}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                    onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                    onOpenLeave={(c) => setSelected360Customer(c)}
+                    onOpenPenalty={(c) => setSelectedPenaltyCustomer(c)}
+                    onDeleteCustomer={handleDeleteCustomer}
+                    onClearAllCustomers={handleClearAllCustomers}
+                    onOpenWhatsAppDuesBot={() => setIsWhatsAppDuesBotOpen(true)}
+                  />
+                )}
+
+                {currentTab === 'search_customer' && (
+                  <SearchCustomerView
+                    customers={customers}
+                    mealLogs={mealLogs}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                    onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                    onOpenCardPrint={(c) => setSelectedCardPrintCustomer(c)}
+                    onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+                    onRecordMeal={handleRecordManualAttendance}
+                  />
+                )}
+
+                {currentTab === 'leaves' && (
+                  <LeavesManagerView
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onApproveLeave={handleApproveLeave}
+                    onRejectLeave={handleRejectLeave}
+                    onCreateTestLeave={handleCreateTestLeave}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'subscriptions' && (
+                  <SubscriptionsView
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                    onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+                  />
+                )}
+
+                {(currentTab === 'attendance' || currentTab === 'meals') && (
+                  <AttendanceCenterView
+                    mealLogs={mealLogs}
+                    customers={customers}
+                    onOpenScanner={() => setIsScannerOpen(true)}
+                    onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
+                    onRecordManualAttendance={handleRecordManualAttendance}
+                    onRefreshLogs={() => {
+                      fetchAttendanceLogsFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(logs => {
+                        if (logs && logs.length > 0) {
+                          setMealLogs(prev => {
+                            const map = new Map<string, MealLog>();
+                            logs.forEach((l: any) => map.set(l.id, l));
+                            prev.forEach(l => { if (!map.has(l.id)) map.set(l.id, l); });
+                            const merged = Array.from(map.values()).sort(
+                              (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                            );
+                            saveMealLogs(merged);
+                            return merged;
+                          });
+                        }
+                      });
+                    }}
+                  />
+                )}
+
+                {currentTab === 'finance' && (
+                  <BillingOverviewView
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onNavigateSubModule={(sub) => {
+                      if (sub === 'statement_calc') {
+                        setCurrentTab('monthly_statement');
+                      } else if (sub === 'qr_settings') {
+                        setCurrentTab('mess_qr');
+                      } else {
+                        setCurrentTab(sub);
+                      }
+                    }}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'billing' && (
+                  <BillingOverviewView
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onNavigateSubModule={(sub) => {
+                      if (sub === 'statement_calc') {
+                        setCurrentTab('monthly_statement');
+                      } else if (sub === 'qr_settings') {
+                        setCurrentTab('mess_qr');
+                      } else {
+                        setCurrentTab(sub);
+                      }
+                    }}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'upi_payments' && (
+                  <UPIPaymentsView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'cash_payments' && (
+                  <CashPaymentsView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                    onRefreshCustomers={() => {}}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'mess_qr' && (
+                  <MessPaymentQrView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'payment_history' && (
+                  <PaymentHistoryView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                    onRefreshCustomers={() => {}}
+                  />
+                )}
+
+                {currentTab === 'pending_payments' && (
+                  <PendingPaymentsView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                    onRefreshCustomers={() => {}}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'payment_verification' && (
+                  <PaymentVerificationView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                    onRefreshCustomers={() => {}}
+                  />
+                )}
+
+                {currentTab === 'customer_ledger' && (
+                  <CustomerLedgerView
+                    customers={customers}
+                    onBack={() => setCurrentTab('billing')}
+                  />
+                )}
+
+                {(currentTab === 'monthly_statement' || currentTab === 'monthly_statements') && (
+                  <MonthlyStatementCalculatorView
+                    customers={customers}
+                    onBack={() => setCurrentTab('finance')}
+                    onRecordPayment={handleRecordPayment}
+                  />
+                )}
+
+                {currentTab === 'walkin_pos' && (
+                  <WalkinPOSView
+                    onBack={() => setCurrentTab('dashboard')}
+                    onNavigateMealTypes={() => setCurrentTab('walkin_meal_types')}
+                    onNavigateHistory={() => setCurrentTab('walkin_payments')}
+                  />
+                )}
+
+                {currentTab === 'walkin_meal_types' && (
+                  <WalkinMealTypesView
+                    onBack={() => setCurrentTab('walkin_pos')}
+                    onNavigatePOS={() => setCurrentTab('walkin_pos')}
+                  />
+                )}
+
+                {currentTab === 'walkin_payments' && (
+                  <WalkinPaymentsView
+                    onBack={() => setCurrentTab('walkin_pos')}
+                    onNavigatePOS={() => setCurrentTab('walkin_pos')}
+                  />
+                )}
+
+                {currentTab === 'expenses' && (
+                  <ExpensesView
+                    expenses={expenses}
+                    onAddExpense={handleAddExpense}
+                    onDeleteExpense={handleDeleteExpense}
+                  />
+                )}
+
+                {currentTab === 'inventory' && (
+                  <InventoryCenterView
+                    onBack={() => setCurrentTab('dashboard')}
+                    customers={customers}
+                    mealLogs={mealLogs}
+                    expenses={expenses}
+                    rules={rules}
+                  />
+                )}
+
+                {currentTab === 'workers' && (
+                  <WorkersAndKitchenView
+                    workers={workers}
+                    cleanings={cleanings}
+                    customers={customers}
+                    mealLogs={mealLogs}
+                    onAddWorker={handleAddWorker}
+                    onUpdateWorkerAttendance={handleUpdateWorkerAttendance}
+                    onDeleteWorker={handleDeleteWorker}
+                    onAddCleaning={handleAddCleaning}
+                    onOpenKitchenEstimator={() => setIsKitchenEstimatorOpen(true)}
+                    onOpenMaharajCookSheet={() => setIsMaharajCookSheetOpen(true)}
+                  />
+                )}
+
+                {currentTab === 'staff_management' && (
+                  <StaffManagementView
+                    workers={workers}
+                    cleanings={cleanings}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onAddWorker={(workerData) => {
+                      const completeWorker: Worker = {
+                        ...workerData,
+                        id: `wk-${Date.now()}`,
+                        attendance: {}
+                      };
+                      handleAddWorker(completeWorker);
+                    }}
+                    onDeleteWorker={handleDeleteWorker}
+                    onUpdateWorkerAttendance={handleUpdateWorkerAttendance}
+                  />
+                )}
+
+                {currentTab === 'roles_permissions' && (
+                  <RolesPermissionsView
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'weekly_menu' && (
+                  <WeeklyMenuEditorView
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'polls' && (
+                  <PollsManagerView
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'reminders' && (
+                  <RemindersNoticesView
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'meal_ratings' && (
+                  <MealRatingsView
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'complaints' && (
+                  <ComplaintsTrackerView
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'my_mess' && (
+                  <MyMessProfileView
+                    messName={rules.messName}
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'my_account' && (
+                  <MyMessProfileView
+                    messName={rules.messName}
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'settings' && (
+                  <MessSettingsView
+                    rules={rules}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onSaveRules={handleSaveRules}
+                  />
+                )}
+
+                {currentTab === 'activity_log' && (
+                  <SecurityActivityLogView
+                    mealLogs={mealLogs}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onOpenScanner={() => setIsScannerOpen(true)}
+                  />
+                )}
+
+                {currentTab === 'help_support' && (
+                  <HelpSupportView
+                    onBack={() => setCurrentTab('dashboard')}
+                    onNavigateSupportRequests={() => setCurrentTab('support_requests')}
+                  />
+                )}
+
+                {currentTab === 'support_requests' && (
+                  <SupportRequestsView
+                    onBack={() => setCurrentTab('dashboard')}
+                    onNavigateHelpSupport={() => setCurrentTab('help_support')}
+                  />
+                )}
+
+                {currentTab === 'excel_export' && (
+                  <ExcelExportHubView
+                    customers={customers}
+                    mealLogs={mealLogs}
+                    expenses={expenses}
+                    workers={workers}
+                    trials={trials}
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'trial_students' && (
+                  <TrialStudentsManagerView
+                    onRefreshAllData={pullSyncFromServer}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onOpenTrialQr={() => setIsTrialQrModalOpen(true)}
+                  />
+                )}
+
+                {currentTab === 'reports' && (
+                  <AuditAndReportsView
+                    customers={customers}
+                    expenses={expenses}
+                    workers={workers}
+                    trials={trials}
+                    onOpenRenew={(c) => setSelectedRenewCustomer(c)}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                    onAddTrial={handleAddTrial}
+                    onConvertTrialToCustomer={handleConvertTrialToCustomer}
+                    onApproveLeave={handleApproveLeave}
+                    onRejectLeave={handleRejectLeave}
+                    onOpenTrialQr={() => setIsTrialQrModalOpen(true)}
+                    onOpenPredictCampaignResults={() => setIsPredictCampaignOpen(true)}
+                    initialTab={reportsInitialTab}
+                    onTabChange={setReportsInitialTab}
+                  />
+                )}
+
+                {currentTab === 'attendance_reports' && (
+                  <AttendanceReportsView
+                    mealLogs={mealLogs}
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'customer_reports' && (
+                  <CustomerReportsView
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'payment_reports' && (
+                  <PaymentReportsView
+                    customers={customers}
+                    onBack={() => setCurrentTab('dashboard')}
+                    onOpenCustomer360={(c) => setSelected360Customer(c)}
+                  />
+                )}
+
+                {currentTab === 'expense_reports' && (
+                  <ExpenseReportsView
+                    expenses={expenses}
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+
+                {currentTab === 'business_summary' && (
+                  <BusinessSummaryView
+                    customers={customers}
+                    expenses={expenses}
+                    trials={trials}
+                    onBack={() => setCurrentTab('dashboard')}
+                  />
+                )}
+              </main>
+
+              <footer className="py-4 border-t border-slate-200/80 bg-white text-center text-xs text-slate-500">
+                <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-700">
+                    {rules.messName} • Digital Dining & Mess Operations Management
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-slate-400">
+                      Near Boys & Girls Hostel, College Road
+                    </span>
+                  </div>
+                </div>
+              </footer>
+            </div>
+
+            {/* Owner Desk Modals */}
+            <QrScannerModal
+              isOpen={isScannerOpen}
+              onClose={() => setIsScannerOpen(false)}
+              customers={customers}
+              mealLogs={mealLogs}
+              rules={rules}
+              onRecordMeal={handleRecordMeal}
+              onOpenPayment={(c) => setSelectedPaymentCustomer(c)}
+              userRole={currentRole}
+            />
+
+            <AddCustomerModal
+              isOpen={isAddCustomerOpen}
+              onClose={() => setIsAddCustomerOpen(false)}
+              onAddCustomer={handleAddCustomer}
+              onAdd={async (c) => {
+                handleAddCustomer(c);
+                await syncCustomerToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
+                return { success: true };
               }}
-              currentRole={currentRole}
-              onRoleChange={setCurrentRole}
-              onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
-              onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
-              onOpenSettings={() => setActiveOwnerPage('mess_settings')}
-              messName={rules.messName}
-              pendingLeavesCount={pendingLeavesCount}
-              pendingPaymentsCount={pendingPaymentsCount}
-              onLogout={handleLogout}
-              userEmail={authenticatedUser?.identifier}
-              onOpenDrawer={() => setIsOwnerDrawerOpen(true)}
-              onOpenNotifications={() => setIsNotificationCenterOpen(true)}
-              unreadNotificationsCount={notifications.filter(n => !n.isRead).length}
-              onSwitchPortal={() => {
-                if (customers.length > 0) {
-                  setStudentPortalCustomer(customers[0]);
-                  setCurrentPortal('student');
-                } else {
-                  setIsPortalSwitcherOpen(true);
-                }
+              existingCount={customers.length}
+              messId="63b00e12-a702-492f-bd56-1e260338699f"
+              rules={rules}
+            />
+
+            <Customer360Modal
+              customer={selected360Customer}
+              isOpen={!!selected360Customer}
+              onClose={() => setSelected360Customer(null)}
+              onOpenPrintPass={(c) => {
+                setSelected360Customer(null);
+                setSelectedCardPrintCustomer(c);
+              }}
+              onOpenRenew={(c) => {
+                setSelected360Customer(null);
+                setSelectedRenewCustomer(c);
+              }}
+              onOpenPayment={(c) => {
+                setSelected360Customer(null);
+                setSelectedPaymentCustomer(c);
+              }}
+              onCustomerUpdated={() => {
+                // optionally refresh
               }}
             />
 
-          {/* Main Content Body */}
-          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-            {/* Direct Sub-Views from 3-Line Menu & Navigation */}
-            {activeOwnerPage === 'trial_students' ? (
-              <TrialStudentsManagerView
-                onRefreshAllData={() => {
-                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-                    if (res && res.length > 0) {
-                      setCustomers(res);
-                      saveCustomers(res);
-                    }
-                  });
-                }}
-              />
-            ) : activeOwnerPage === 'search_customer' ? (
-              <SearchCustomerView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('customers')}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
-              />
-            ) : activeOwnerPage === 'subscriptions' ? (
-              <SubscriptionsView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('customers')}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
-              />
-            ) : activeOwnerPage === 'skip_meal' ? (
-              <LeavesManagerView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onApproveLeave={handleApproveLeave}
-                onRejectLeave={handleRejectLeave}
-                onCreateTestLeave={handleCreateTestLeave}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-              />
-            ) : activeOwnerPage === 'mark_attendance' ? (
-              <MarkAttendanceView
-                customers={customers}
-                mealLogs={mealLogs}
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onRecordMeal={(cid, shift) => {
-                  handleRecordMeal(cid, 'ALLOW', 'Marked at Counter', shift || 'lunch');
-                  return { success: true, message: 'Attendance Marked Successfully' };
-                }}
-                onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
-              />
-            ) : activeOwnerPage === 'attendance_scanner' ? (
-              <AttendanceScannerScreen
-                customers={customers}
-                mealLogs={mealLogs}
-                rules={rules}
-                userRole={currentRole}
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onRecordMeal={(cid, shift) => {
-                  handleRecordMeal(cid, 'ALLOW', 'Scan Approved', shift || 'lunch');
-                  return { success: true, message: 'Scan Approved' };
-                }}
-                onOpenPayment={(c) => setSelectedPaymentCustomer(c)}
-              />
-            ) : activeOwnerPage === 'billing_payments' ? (
-              <BillingOverviewView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onNavigateSubModule={(mod) => setActiveOwnerPage(mod as OwnerNavPage)}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-              />
-            ) : activeOwnerPage === 'upi_payments' ? (
-              <UPIPaymentsView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-              />
-            ) : activeOwnerPage === 'cash_payments' ? (
-              <CashPaymentsView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-                onRefreshCustomers={() => {
-                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-                    if (res && res.length > 0) {
-                      setCustomers(res);
-                      saveCustomers(res);
-                    }
-                  });
-                }}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-              />
-            ) : activeOwnerPage === 'qr_settings' ? (
-              <PaymentsManagerView
-                customers={customers}
-                initialSubTab="qr_config"
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onRefreshCustomers={() => {
-                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-                    if (res && res.length > 0) {
-                      setCustomers(res);
-                      saveCustomers(res);
-                    }
-                  });
-                }}
-              />
-            ) : activeOwnerPage === 'payment_history' ? (
-              <PaymentHistoryView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-                onRefreshCustomers={() => {
-                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-                    if (res && res.length > 0) {
-                      setCustomers(res);
-                      saveCustomers(res);
-                    }
-                  });
-                }}
-              />
-            ) : activeOwnerPage === 'pending_payments' ? (
-              <PendingPaymentsView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-                onRefreshCustomers={() => {
-                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-                    if (res && res.length > 0) {
-                      setCustomers(res);
-                      saveCustomers(res);
-                    }
-                  });
-                }}
-              />
-            ) : activeOwnerPage === 'payment_verification' ? (
-              <PaymentVerificationView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-                onRefreshCustomers={() => {
-                  fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-                    if (res && res.length > 0) {
-                      setCustomers(res);
-                      saveCustomers(res);
-                    }
-                  });
-                }}
-              />
-            ) : activeOwnerPage === 'customer_ledger' ? (
-              <CustomerLedgerView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-              />
-            ) : activeOwnerPage === 'statement_calc' ? (
-              <MonthlyStatementCalculatorView
-                customers={customers}
-                onBack={() => setActiveOwnerPage('billing_payments')}
-              />
-            ) : activeOwnerPage === 'monthly_statements' ? (
-              <MonthlyStatementGenerator
-                customers={customers}
-                selectedCustomer={selectedStatementCustomer}
-              />
-            ) : activeOwnerPage === 'walkin_pos' ? (
-              <WalkinPOSView
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onNavigateMealTypes={() => setActiveOwnerPage('walkin_meal_types')}
-                onNavigateHistory={() => setActiveOwnerPage('walkin_payments')}
-              />
-            ) : activeOwnerPage === 'walkin_meal_types' ? (
-              <WalkinMealTypesView
-                onBack={() => setActiveOwnerPage('walkin_pos')}
-                onNavigatePOS={() => setActiveOwnerPage('walkin_pos')}
-              />
-            ) : activeOwnerPage === 'walkin_payments' ? (
-              <WalkinPaymentsView
-                onBack={() => setActiveOwnerPage('walkin_pos')}
-                onNavigatePOS={() => setActiveOwnerPage('walkin_pos')}
-              />
-            ) : activeOwnerPage === 'expense_tracker' ? (
-              <ExpenseTrackerView
-                expenses={expenses}
-                onAddExpense={(exp) => handleAddExpense({ ...exp, id: `exp-${Date.now()}` })}
-                onDeleteExpense={handleDeleteExpense}
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'inventory' ? (
-              <InventoryCenterView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'meal_plans_pricing' ? (
-              <MealPlansPricingView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'meal_rate_timing' ? (
-              <MealRateTimingView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'weekly_menu' ? (
-              <WeeklyMenuEditorView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'polls' ? (
-              <PollsManagerView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'reminders' ? (
-              <RemindersNoticesView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'meal_ratings' ? (
-              <MealRatingsView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'complaints_tracker' ? (
-              <ComplaintsTrackerView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'mess_settings' ? (
-              <MessSettingsView
-                rules={rules}
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onSaveRules={(newRules) => {
-                  setRules(newRules);
-                  saveRules(newRules);
-                }}
-              />
-            ) : activeOwnerPage === 'staff_management' ? (
-              <StaffManagementView
-                workers={workers}
-                cleanings={cleanings}
-                onBack={() => setActiveOwnerPage('dashboard')}
-                onAddWorker={(w) => handleAddWorker({ ...w, id: `worker-${Date.now()}`, attendance: {} })}
-                onDeleteWorker={handleDeleteWorker}
-                onUpdateWorkerAttendance={(id, date, status) => handleUpdateWorkerAttendance(id, date, status === 'leave' ? 'absent' : status)}
-              />
-            ) : activeOwnerPage === 'roles_permissions' ? (
-              <RolesPermissionsView
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : activeOwnerPage === 'my_mess' || activeOwnerPage === 'my_account' ? (
-              <MyMessProfileView
-                messName={rules.messName}
-                onBack={() => setActiveOwnerPage('dashboard')}
-              />
-            ) : ['attendance_reports', 'customer_reports', 'payment_reports', 'expense_reports', 'business_summary', 'excel_export', 'security_log'].includes(activeOwnerPage) ? (
-              <AuditAndReportsView
-                customers={customers}
-                expenses={expenses}
-                workers={workers}
-                trials={trials}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onAddTrial={handleAddTrial}
-                onConvertTrialToCustomer={handleConvertTrialToCustomer}
-                onApproveLeave={handleApproveLeave}
-                onRejectLeave={handleRejectLeave}
-                initialTab={
-                  activeOwnerPage === 'attendance_reports' ? 'leave_approvals' :
-                  activeOwnerPage === 'customer_reports' ? 'expiry_watch' : 'pnl'
+            <CustomerCardPrintModal
+              customer={selectedCardPrintCustomer}
+              isOpen={!!selectedCardPrintCustomer}
+              onClose={() => setSelectedCardPrintCustomer(null)}
+              messName={rules.messName}
+              messSubtitle={rules.messSubtitle}
+            />
+
+            <RenewalModal
+              customer={selectedRenewCustomer}
+              isOpen={!!selectedRenewCustomer}
+              onClose={() => setSelectedRenewCustomer(null)}
+              onRenew={handleRenew}
+            />
+
+            <PaymentModal
+              customer={selectedPaymentCustomer}
+              isOpen={!!selectedPaymentCustomer}
+              onClose={() => setSelectedPaymentCustomer(null)}
+              onRecordPayment={handleRecordPayment}
+            />
+
+            <PenaltyModal
+              customer={selectedPenaltyCustomer}
+              isOpen={!!selectedPenaltyCustomer}
+              onClose={() => setSelectedPenaltyCustomer(null)}
+              onApplyPenalty={handleApplyPenalty}
+            />
+
+            <SettingsModal
+              isOpen={isSettingsOpen}
+              onClose={() => setIsSettingsOpen(false)}
+              rules={rules}
+              onSaveRules={handleSaveRules}
+              currentRole={currentRole}
+            />
+
+            <PredictCampaignResultsModal
+              isOpen={isPredictCampaignOpen}
+              onClose={() => setIsPredictCampaignOpen(false)}
+            />
+
+            <PortalSwitcherModal
+              isOpen={isPortalSwitcherOpen}
+              onClose={() => setIsPortalSwitcherOpen(false)}
+              onSelectOwner={() => setCurrentPortal('owner')}
+              onSelectStudent={(c) => {
+                if (c) {
+                  setSelectedStudentCustomer(c);
+                  setCurrentPortal('student');
+                } else if (customers.length > 0) {
+                  setSelectedStudentCustomer(customers[0]);
+                  setCurrentPortal('student');
+                } else {
+                  alert('Please register at least one student member first.');
                 }
-                onTabChange={setReportsInitialTab}
-              />
-            ) : activeOwnerPage === 'customers' ? (
-              <CustomersListView
-                customers={customers}
-                onOpenAddModal={() => setIsAddCustomerOpen(true)}
-                onOpenCardPrint={(c) => setSelectedPrintCustomer(c)}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenLeave={(c) => {
-                  setSelected360Customer(c);
-                }}
-                onOpenPenalty={(c) => setSelectedPenaltyCustomer(c)}
-                onDeleteCustomer={handleDeleteCustomer}
-                onClearAllCustomers={handleClearAllCustomers}
-              />
-            ) : currentTab === 'meals' || (activeOwnerPage as any) === 'meals' || activeOwnerPage === 'attendance_reports' ? (
-              <AttendanceCenterView
-                mealLogs={mealLogs}
-                customers={customers}
-                onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
-                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
-                onRecordManualAttendance={(cid, shift, reason) => {
-                  handleRecordMeal(cid, 'ALLOW', reason || 'Counter Verified', shift || 'lunch');
-                  return { success: true, message: `Marked ${shift.toUpperCase()} meal for ${cid}` };
-                }}
-                onRefreshLogs={() => {
-                  // Reload meal logs
-                  const current = loadMealLogs();
-                  setMealLogs(current);
-                }}
-              />
-            ) : currentTab === 'expenses' ? (
-              <ExpensesView
-                expenses={expenses}
-                onAddExpense={handleAddExpense}
-                onDeleteExpense={handleDeleteExpense}
-              />
-            ) : currentTab === 'workers' ? (
-              <WorkersAndKitchenView
-                workers={workers}
-                cleanings={cleanings}
-                onAddWorker={handleAddWorker}
-                onUpdateWorkerAttendance={handleUpdateWorkerAttendance}
-                onDeleteWorker={handleDeleteWorker}
-                onAddCleaning={handleAddCleaning}
-              />
-            ) : currentTab === 'reports' ? (
-              <AuditAndReportsView
-                customers={customers}
-                expenses={expenses}
-                workers={workers}
-                trials={trials}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onAddTrial={handleAddTrial}
-                onConvertTrialToCustomer={handleConvertTrialToCustomer}
-                onApproveLeave={handleApproveLeave}
-                onRejectLeave={handleRejectLeave}
-                initialTab={reportsInitialTab}
-                onTabChange={setReportsInitialTab}
-              />
-            ) : (
-              <DashboardView
-                customers={customers}
-                mealLogs={mealLogs}
-                expenses={expenses}
-                workers={workers}
-                cleanings={cleanings}
-                rules={rules}
-                currentRole={currentRole}
-                onOpenScanner={() => setActiveOwnerPage('attendance_scanner')}
-                onOpenUniversalQr={() => setIsUniversalQrOpen(true)}
-                onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
-                onOpenAddExpense={() => setActiveOwnerPage('expense_tracker')}
-                onOpenCardPrint={(c) => setSelectedPrintCustomer(c)}
-                onOpenCustomer360={(c) => setSelected360Customer(c)}
-                onOpenRenew={(c) => setSelectedRenewCustomer(c)}
-                onOpenSettings={() => setActiveOwnerPage('mess_settings')}
-                onNavigateTab={(tab) => {
-                  setCurrentTab(tab);
-                  if (tab === 'dashboard') setActiveOwnerPage('dashboard');
-                  else if (tab === 'customers') setActiveOwnerPage('customers');
-                  else if (tab === 'meals') setActiveOwnerPage('meals' as any);
-                  else if (tab === 'payments') setActiveOwnerPage('billing_payments');
-                  else if (tab === 'expenses') setActiveOwnerPage('expense_tracker');
-                  else if (tab === 'workers') setActiveOwnerPage('staff_management');
-                  else if (tab === 'reports') setActiveOwnerPage('business_summary');
-                }}
-                onApproveLeave={handleApproveLeave}
-                onRejectLeave={handleRejectLeave}
-                onCreateTestLeave={handleCreateTestLeave}
-                onOpenLeaveApprovalsTab={() => {
-                  setActiveOwnerPage('attendance_reports');
-                }}
-              />
-            )}
-          </main>
+              }}
+              customers={customers}
+              currentPortal={currentPortal}
+            />
 
-          {/* Minimal Clean Footer */}
-          <footer className="py-4 border-t border-slate-200 bg-white text-center text-xs text-slate-500">
-            <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span className="font-semibold text-slate-600">
-                {rules.messName} • Digital Dining & Mess Operations Management
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setIsPortalSwitcherOpen(true)}
-                  className="text-orange-700 font-bold hover:underline cursor-pointer"
-                >
-                  Portal Switcher
-                </button>
-                <span>•</span>
-                <span className="font-mono text-[11px] text-slate-400">Near Boys & Girls Hostel, College Road</span>
-              </div>
-            </div>
-          </footer>
-        </div>
+            <UniversalQrManagerModal
+              isOpen={isUniversalQrOpen}
+              onClose={() => setIsUniversalQrOpen(false)}
+              messId="63b00e12-a702-492f-bd56-1e260338699f"
+              customers={customers}
+              messName={rules.messName}
+              onAttendanceRecorded={() => {
+                fetchAttendanceLogsFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(logs => {
+                  if (logs && logs.length > 0) {
+                    setMealLogs(prev => {
+                      const map = new Map<string, MealLog>();
+                      logs.forEach((l: any) => map.set(l.id, l));
+                      prev.forEach(l => { if (!map.has(l.id)) map.set(l.id, l); });
+                      const merged = Array.from(map.values()).sort(
+                        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                      );
+                      saveMealLogs(merged);
+                      return merged;
+                    });
+                  }
+                });
+              }}
+            />
 
-        {/* MODALS */}
-      {/* 1. Gate QR Scanner Modal */}
-      <QrScannerModal
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        customers={customers}
-        mealLogs={mealLogs}
-        rules={rules}
-        onRecordMeal={handleRecordMeal}
-        onOpenPayment={(c) => setSelectedPaymentCustomer(c)}
-        userRole={currentRole}
-      />
+            <TrialQrModal
+              isOpen={isTrialQrModalOpen}
+              onClose={() => setIsTrialQrModalOpen(false)}
+              rules={rules}
+              onOpenLivePreview={() => {
+                if (typeof window !== 'undefined') {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('portal', 'trial');
+                  window.history.pushState({}, '', url.toString());
+                }
+                setIsTrialScanMode(true);
+              }}
+            />
 
-      {/* 2. Register Member Modal */}
-      <AddCustomerModal
-        isOpen={isAddCustomerOpen}
-        onClose={() => setIsAddCustomerOpen(false)}
-        onAddCustomer={handleAddCustomer}
-        onAdd={async (customer) => {
-          handleAddCustomer(customer);
-          await ensureCustomerSyncedToSupabase(customer, '63b00e12-a702-492f-bd56-1e260338699f');
-          return { success: true };
-        }}
-        existingCount={customers.length}
-        messId="63b00e12-a702-492f-bd56-1e260338699f"
-        rules={rules}
-      />
+            <NotificationCenterModal
+              isOpen={isNotificationsOpen}
+              onClose={() => setIsNotificationsOpen(false)}
+              notifications={notifications}
+              onMarkAsRead={async (id) => {
+                await markNotificationAsRead(id);
+                setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+              }}
+              onMarkAllAsRead={async () => {
+                await markAllNotificationsAsRead('63b00e12-a702-492f-bd56-1e260338699f');
+                setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+              }}
+              onDeleteNotification={async (id) => {
+                await deleteOwnerNotification(id);
+                setNotifications(prev => prev.filter(n => n.id !== id));
+              }}
+              onClearAllRead={async () => {
+                await clearAllReadOwnerNotifications('63b00e12-a702-492f-bd56-1e260338699f');
+                setNotifications(prev => prev.filter(n => !n.isRead));
+              }}
+              onSelectRecord={(type, customerId) => {
+                if (customerId) {
+                  const matched = customers.find(
+                    c => c.id.trim().toLowerCase() === customerId.trim().toLowerCase()
+                  );
+                  if (matched) {
+                    setSelected360Customer(matched);
+                  } else {
+                    console.warn('Customer not found for notification ID:', customerId);
+                  }
+                }
+              }}
+              onRefresh={() => {
+                setIsNotificationsLoading(true);
+                fetchOwnerNotifications('63b00e12-a702-492f-bd56-1e260338699f').then(data => {
+                  setNotifications(data || []);
+                  setIsNotificationsLoading(false);
+                });
+              }}
+              isLoading={isNotificationsLoading}
+            />
 
-      {/* 3. Customer 360 Profile Modal */}
-      <Customer360Modal
-        customer={selected360Customer}
-        isOpen={!!selected360Customer}
-        onClose={() => setSelected360Customer(null)}
-        onOpenPrintPass={(c: Customer) => {
-          setSelected360Customer(null);
-          setSelectedPrintCustomer(c);
-        }}
-        onOpenRenew={(c: Customer) => {
-          setSelected360Customer(null);
-          setSelectedRenewCustomer(c);
-        }}
-        onOpenPayment={(c: Customer) => {
-          setSelected360Customer(null);
-          setSelectedPaymentCustomer(c);
-        }}
-        onOpenStatement={(c: Customer) => {
-          setSelected360Customer(null);
-          setSelectedStatementCustomer(c);
-          setActiveOwnerPage('monthly_statements');
-        }}
-        onCustomerUpdated={() => {
-          fetchCustomersFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(res => {
-            if (res && res.length > 0) {
-              setCustomers(res);
-              saveCustomers(res);
-            }
-          });
-        }}
-      />
+            {/* Campaign Participants Hub Modal */}
+            <CampaignParticipantsHubModal
+              isOpen={isCampaignParticipantsOpen}
+              onClose={() => setIsCampaignParticipantsOpen(false)}
+              customers={customers}
+            />
 
-      {/* 4. Print & Digital Pass Card Modal */}
-      <CustomerCardPrintModal
-        customer={selectedPrintCustomer}
-        isOpen={!!selectedPrintCustomer}
-        onClose={() => setSelectedPrintCustomer(null)}
-        messName={rules.messName}
-        messSubtitle={rules.messSubtitle}
-      />
+            {/* Predict Campaign Results AI Winners Modal */}
+            <PredictCampaignResultsModal
+              isOpen={isPredictCampaignOpen}
+              onClose={() => setIsPredictCampaignOpen(false)}
+              customers={customers}
+            />
 
-      {/* 5. Renewal Modal */}
-      <RenewalModal
-        customer={selectedRenewCustomer}
-        isOpen={!!selectedRenewCustomer}
-        onClose={() => setSelectedRenewCustomer(null)}
-        onRenew={handleRenewCustomer}
-      />
+            {/* Kitchen Preparation Estimator Modal */}
+            <KitchenEstimatorModal
+              isOpen={isKitchenEstimatorOpen}
+              onClose={() => setIsKitchenEstimatorOpen(false)}
+              customers={customers}
+              rules={rules}
+              mealLogs={mealLogs}
+              onNavigateInventory={() => {
+                setIsKitchenEstimatorOpen(false);
+                setCurrentTab('inventory');
+              }}
+            />
 
-      {/* 6. Payment / Collect Dues Modal */}
-      <PaymentModal
-        customer={selectedPaymentCustomer}
-        isOpen={!!selectedPaymentCustomer}
-        onClose={() => setSelectedPaymentCustomer(null)}
-        onRecordPayment={handleRecordPayment}
-      />
+            {/* Zero-Cost Auto-Pilot WhatsApp Dues Recovery Bot */}
+            <WhatsAppDuesBotModal
+              isOpen={isWhatsAppDuesBotOpen}
+              onClose={() => setIsWhatsAppDuesBotOpen(false)}
+              customers={customers}
+              rules={rules}
+              onRefreshCustomers={() => {
+                setCustomers(loadCustomers());
+              }}
+            />
 
-      {/* 7. Penalty Modal */}
-      <PenaltyModal
-        customer={selectedPenaltyCustomer}
-        isOpen={!!selectedPenaltyCustomer}
-        onClose={() => setSelectedPenaltyCustomer(null)}
-        onApplyPenalty={handleApplyPenalty}
-      />
+            {/* Gate Scanner Attendance Integrity & Anti-Theft AI */}
+            <AttendanceIntegrityModal
+              isOpen={isAttendanceIntegrityOpen}
+              onClose={() => setIsAttendanceIntegrityOpen(false)}
+              mealLogs={mealLogs}
+              customers={customers}
+              leaves={[]}
+              rules={rules}
+              onApplyPenalty={(customerId, amount, reason) => {
+                handleApplyPenalty(customerId, amount, reason);
+              }}
+            />
 
-      {/* 8. Settings & Rules Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        rules={rules}
-        onSaveRules={handleSaveRules}
-        currentRole={currentRole}
-      />
+            {/* Maharaj Daily Auto Cook Sheet & Ration AI */}
+            <KitchenCookSheetModal
+              isOpen={isMaharajCookSheetOpen}
+              onClose={() => setIsMaharajCookSheetOpen(false)}
+              customers={customers}
+              leaves={[]}
+              rules={rules}
+              mealLogs={mealLogs}
+            />
 
-      {/* 9. Portal Switcher Modal */}
-      <PortalSwitcherModal
-        isOpen={isPortalSwitcherOpen}
-        onClose={() => setIsPortalSwitcherOpen(false)}
-        onSelectOwner={() => setCurrentPortal('owner')}
-        onSelectStudent={(c) => {
-          if (c) {
-            setStudentPortalCustomer(c);
-            setCurrentPortal('student');
-          } else if (customers.length > 0) {
-            setStudentPortalCustomer(customers[0]);
-            setCurrentPortal('student');
-          } else {
-            alert('Please register at least one student member first.');
-          }
-        }}
-        customers={customers}
-        currentPortal={currentPortal}
-      />
+            {/* Smart Mess P&L & Cost-Per-Plate AI Dashboard */}
+            <MessPnlCostPerPlateModal
+              isOpen={isMessPnlOpen}
+              onClose={() => setIsMessPnlOpen(false)}
+              customers={customers}
+              mealLogs={mealLogs}
+              expenses={expenses}
+              workers={workers}
+              rules={rules}
+              onOpenAddExpense={() => {
+                setIsMessPnlOpen(false);
+                setCurrentTab('expenses');
+              }}
+              onOpenWhatsAppDues={() => {
+                setIsMessPnlOpen(false);
+                setIsWhatsAppDuesBotOpen(true);
+              }}
+            />
 
-      {/* 10. Universal Mess Counter Standee QR Modal */}
-      <UniversalQrManagerModal
-        isOpen={isUniversalQrOpen}
-        onClose={() => setIsUniversalQrOpen(false)}
-        messId="63b00e12-a702-492f-bd56-1e260338699f"
-        customers={customers}
-        messName={rules.messName}
-        onAttendanceRecorded={() => {
-          fetchAttendanceLogsFromSupabase('63b00e12-a702-492f-bd56-1e260338699f').then(logs => {
-            if (logs && logs.length > 0) {
-              setMealLogs(prev => {
-                const map = new Map<string, MealLog>();
-                logs.forEach(l => map.set(l.id, l));
-                prev.forEach(l => { if (!map.has(l.id)) map.set(l.id, l); });
-                const merged = Array.from(map.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-                saveMealLogs(merged);
-                return merged;
-              });
-            }
-          });
-        }}
-      />
-
-      {/* 11. FEATURE 1: Professional Notification Center Modal */}
-      <NotificationCenterModal
-        isOpen={isNotificationCenterOpen}
-        onClose={() => setIsNotificationCenterOpen(false)}
-        notifications={notifications}
-        onMarkAsRead={handleMarkNotificationRead}
-        onMarkAllAsRead={handleMarkAllNotificationsRead}
-        onRefresh={loadOwnerNotifications}
-        isLoading={isNotificationsLoading}
-        onSelectRecord={(_type, customerId) => {
-          if (['payment_received', 'cash_payment', 'upi_payment', 'payment_verification', 'outstanding_fee'].includes(_type)) {
-            setCurrentTab('payments');
-            setActiveOwnerPage('billing_payments');
-            setIsNotificationCenterOpen(false);
-          } else if (customerId) {
-            const matched = customers.find(c => c.id === customerId);
-            if (matched) setSelected360Customer(matched);
-            setIsNotificationCenterOpen(false);
-          }
-        }}
-      />
-
-      {/* 12. FEATURE 2: Professional Three-Line Collapsible Owner Drawer Menu */}
-      <OwnerDrawerMenu
-        isOpen={isOwnerDrawerOpen}
-        onClose={() => setIsOwnerDrawerOpen(false)}
-        activePage={activeOwnerPage}
-        onSelectPage={handleSelectDrawerPage}
-        messName={rules.messName}
-        onLogout={handleLogout}
-      />
+            {/* Daily 11 PM Owner Profit Digest & Closing EOD Modal */}
+            <DailyProfitDigestModal
+              isOpen={isDailyProfitDigestOpen}
+              onClose={() => setIsDailyProfitDigestOpen(false)}
+              customers={customers}
+              mealLogs={mealLogs}
+              expenses={expenses}
+              workers={workers}
+              rules={rules}
+            />
           </>
         )
       )}
     </div>
   );
 }
+
 export default App;

@@ -90,3 +90,71 @@ CREATE POLICY "Allow public insert expenses" ON public.expenses
 
 CREATE POLICY "Allow public delete expenses" ON public.expenses
     FOR DELETE USING (true);
+
+-- 4. Leave Requests Table
+CREATE TABLE IF NOT EXISTS public.leave_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID REFERENCES public.messes(id) ON DELETE CASCADE,
+    customer_id TEXT NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: Student can read their own, Owner/Staff can read all
+DROP POLICY IF EXISTS "Allow student and owner select leave_requests" ON public.leave_requests;
+CREATE POLICY "Allow student and owner select leave_requests" ON public.leave_requests
+    FOR SELECT TO public
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.customers
+            WHERE LOWER(customers.id) = LOWER(leave_requests.customer_id)
+        )
+    );
+
+-- INSERT: Student can insert their own, Owner/Staff can insert any
+DROP POLICY IF EXISTS "Allow student and owner insert leave_requests" ON public.leave_requests;
+CREATE POLICY "Allow student and owner insert leave_requests" ON public.leave_requests
+    FOR INSERT TO public
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.customers
+            WHERE LOWER(customers.id) = LOWER(leave_requests.customer_id)
+        )
+    );
+
+-- UPDATE: Student can update their own, Owner/Staff can update any
+DROP POLICY IF EXISTS "Allow student and owner update leave_requests" ON public.leave_requests;
+CREATE POLICY "Allow student and owner update leave_requests" ON public.leave_requests
+    FOR UPDATE TO public
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.customers
+            WHERE LOWER(customers.id) = LOWER(leave_requests.customer_id)
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.customers
+            WHERE LOWER(customers.id) = LOWER(leave_requests.customer_id)
+        )
+    );
+
+-- DELETE: Student can delete their own, Owner/Staff can delete any
+DROP POLICY IF EXISTS "Allow student and owner delete leave_requests" ON public.leave_requests;
+CREATE POLICY "Allow student and owner delete leave_requests" ON public.leave_requests
+    FOR DELETE TO public
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.customers
+            WHERE LOWER(customers.id) = LOWER(leave_requests.customer_id)
+        )
+    );
+
+

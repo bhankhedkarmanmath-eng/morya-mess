@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CustomerComplaint } from '../../types/mess';
 import { loadComplaints, saveComplaints } from '../../lib/ownerModulesStorage';
+import { sendNotificationToStudent } from '../../lib/ownerFeaturesApi';
 import { 
   FileText, 
   ArrowLeft, 
@@ -31,7 +32,8 @@ export const ComplaintsTrackerView: React.FC<ComplaintsTrackerViewProps> = ({ on
     return complaints.filter(c => statusFilter === 'all' || c.status === statusFilter);
   }, [complaints, statusFilter]);
 
-  const handleUpdateStatus = (id: string, newStatus: CustomerComplaint['status']) => {
+  const handleUpdateStatus = async (id: string, newStatus: CustomerComplaint['status']) => {
+    const target = complaints.find(c => c.id === id);
     const updated = complaints.map(c => {
       if (c.id === id) {
         return {
@@ -44,11 +46,29 @@ export const ComplaintsTrackerView: React.FC<ComplaintsTrackerViewProps> = ({ on
     });
     setComplaints(updated);
     saveComplaints(updated);
+
+    // Notify student instantly
+    if (target && target.customerId) {
+      await sendNotificationToStudent({
+        customerId: target.customerId,
+        customerName: target.customerName,
+        title: `Complaint Status: ${newStatus.replace('_', ' ')}`,
+        message: `Your grievance regarding "${target.category}" is now marked as ${newStatus.replace('_', ' ')}. Management is taking required action.`,
+        type: 'complaint_update',
+        priority: newStatus === 'RESOLVED' ? 'normal' : 'urgent'
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_complaints_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
   };
 
-  const handleSendReply = (id: string) => {
+  const handleSendReply = async (id: string) => {
     if (!replyText.trim()) return;
 
+    const target = complaints.find(c => c.id === id);
     const updated = complaints.map(c => {
       if (c.id === id) {
         return {
@@ -62,6 +82,24 @@ export const ComplaintsTrackerView: React.FC<ComplaintsTrackerViewProps> = ({ on
 
     setComplaints(updated);
     saveComplaints(updated);
+
+    // Notify student instantly
+    if (target && target.customerId) {
+      await sendNotificationToStudent({
+        customerId: target.customerId,
+        customerName: target.customerName,
+        title: `Mess Owner Replied to Your Complaint`,
+        message: `Owner response: "${replyText.trim()}" (Regarding: ${target.category})`,
+        type: 'complaint_reply',
+        priority: 'urgent'
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_complaints_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
+
     setActiveReplyId(null);
     setReplyText('');
   };

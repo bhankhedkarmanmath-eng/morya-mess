@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Customer } from '../../../types/mess';
-import { markNotificationRead } from '../../../lib/ownerFeaturesApi';
+import { 
+  markNotificationRead, 
+  deleteStudentNotification, 
+  clearAllReadStudentNotifications 
+} from '../../../lib/ownerFeaturesApi';
 import { 
   Bell, 
   CheckCircle2, 
@@ -12,7 +16,9 @@ import {
   Sparkles, 
   RefreshCw, 
   CheckCheck,
-  Filter
+  Filter,
+  Trash2,
+  Check
 } from 'lucide-react';
 
 interface StudentNotificationsTabProps {
@@ -30,8 +36,11 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
 }) => {
   const [filter, setFilter] = useState<'all' | 'unread' | 'payment' | 'leave' | 'general'>('all');
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
+  const readCount = notifications.filter(n => n.is_read).length;
 
   const filteredNotifications = notifications.filter(n => {
     if (filter === 'unread') return !n.is_read;
@@ -48,11 +57,26 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
     onRefresh();
   };
 
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    await deleteStudentNotification(id);
+    setDeletingId(null);
+    onRefresh();
+  };
+
   const handleMarkAllRead = async () => {
     const unread = notifications.filter(n => !n.is_read);
     for (const item of unread) {
       if (item.id) await markNotificationRead(item.id);
     }
+    onRefresh();
+  };
+
+  const handleClearAllRead = async () => {
+    if (!customer?.id) return;
+    setIsClearing(true);
+    await clearAllReadStudentNotifications(customer.id);
+    setIsClearing(false);
     onRefresh();
   };
 
@@ -91,7 +115,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
@@ -100,6 +124,17 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
               >
                 <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
                 <span className="hidden sm:inline">Mark All Read</span>
+              </button>
+            )}
+            {readCount > 0 && (
+              <button
+                onClick={handleClearAllRead}
+                disabled={isClearing}
+                className="py-1.5 px-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                title="Delete all read notifications"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">{isClearing ? 'Clearing...' : 'Clear Read'}</span>
               </button>
             )}
             <button
@@ -229,15 +264,27 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
                       {notif.type ? notif.type.replace(/_/g, ' ') : 'General'}
                     </span>
 
-                    {isUnread && (
+                    <div className="flex items-center gap-2.5">
+                      {isUnread && (
+                        <button
+                          onClick={() => handleMarkAsRead(notif.id)}
+                          disabled={markingId === notif.id}
+                          className="font-bold text-orange-600 hover:text-orange-700 underline cursor-pointer flex items-center gap-1"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>{markingId === notif.id ? 'Marking...' : 'Mark as read'}</span>
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => handleMarkAsRead(notif.id)}
-                        disabled={markingId === notif.id}
-                        className="font-bold text-orange-600 hover:text-orange-700 underline cursor-pointer"
+                        onClick={() => handleDelete(notif.id)}
+                        disabled={deletingId === notif.id}
+                        className="text-slate-400 hover:text-rose-600 transition cursor-pointer p-1 rounded-md hover:bg-rose-50"
+                        title="Delete notification"
                       >
-                        {markingId === notif.id ? 'Marking...' : 'Mark as read'}
+                        <Trash2 className={`w-3.5 h-3.5 ${deletingId === notif.id ? 'animate-pulse text-rose-500' : ''}`} />
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
 

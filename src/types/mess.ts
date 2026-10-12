@@ -252,6 +252,8 @@ export interface TrialVisitor {
   phone: string;
   gender: Gender;
   college: string;
+  mealType?: string;
+  foodItem?: string;
   visitType: '1_day_trial' | '2_day_trial' | 'custom';
   date: string;
   amountPaid: number;
@@ -317,15 +319,53 @@ export interface MoneyReconciliation {
   closedAt?: string;
 }
 
+export type InventoryCategory =
+  | 'Grains & Flours'
+  | 'Pulses & Dals'
+  | 'Cooking Oils & Ghee'
+  | 'Vegetables & Fresh'
+  | 'Dairy & Milk'
+  | 'Spices & Condiments'
+  | 'Gas & Fuel'
+  | 'Cleaning & Kitchen Hygiene'
+  | 'Disposables & Packaging'
+  | 'Other Supplies'
+  | 'ration'
+  | 'vegetable'
+  | 'gas'
+  | 'dairy'
+  | 'oil_masala'
+  | 'cleaning'
+  | 'other'
+  | 'Grains'
+  | 'Pulses'
+  | 'Cooking Oils'
+  | 'Oil & Ghee'
+  | 'Vegetables'
+  | 'Dairy'
+  | 'Spices'
+  | 'Cleaning'
+  | 'Disposables'
+  | 'Other';
+
+export type InventoryUnit = 'kg' | 'liter' | 'bag' | 'cylinder' | 'units' | 'packet' | 'can' | 'piece' | string;
+
 export interface InventoryItem {
   id: string;
   name: string;
-  category: 'ration' | 'vegetable' | 'gas' | 'dairy' | 'oil_masala' | 'cleaning' | 'other';
-  currentQuantity: number;
-  unit: 'kg' | 'liter' | 'bag' | 'cylinder' | 'units';
-  minimumStock: number;
+  category: InventoryCategory;
+  currentQuantity?: number;
+  currentStock: number;
+  unit: InventoryUnit;
+  minimumStock?: number;
+  minStockLevel: number;
+  costPerUnit?: number;
   lastPurchaseDate?: string;
   lastCost?: number;
+  supplierName?: string;
+  lastRestockedDate?: string;
+  lastUpdated?: string;
+  notes?: string;
 }
 
 export interface BusinessRulesConfig {
@@ -387,6 +427,9 @@ export interface MessShiftAudit {
   shiftTimingLabel: string;
   reason: string;
   isSundayNightClosed: boolean;
+  minutesRemainingInShift?: number;
+  isLast15MinutesCall?: boolean;
+  nextShiftLabel?: string;
 }
 
 // ==========================================
@@ -482,9 +525,21 @@ export interface TrialStudent {
 // FEATURE 2: Drawer Navigation Target Pages
 // ==========================================
 export type OwnerNavPage =
-  // Dashboard
+  // 13 Planned Canonical Owner Sections
   | 'dashboard'
-  // Customers / Diners
+  | 'customers'
+  | 'subscriptions'
+  | 'attendance'
+  | 'finance'
+  | 'inventory'
+  | 'menu_meals'
+  | 'report_center'
+  | 'business'
+  | 'communication'
+  | 'operations'
+  | 'administration'
+  | 'my_account'
+  // Customers / Diners Subpages
   | 'customers'
   | 'add_customer'
   | 'search_customer'
@@ -637,31 +692,7 @@ export interface SupportTicket {
 // ==========================================
 // FEATURE 6: Practical Mess Stock & Inventory
 // ==========================================
-export type InventoryCategory =
-  | 'Grains & Flours'
-  | 'Pulses & Dals'
-  | 'Cooking Oils & Ghee'
-  | 'Vegetables & Fresh'
-  | 'Dairy & Milk'
-  | 'Spices & Condiments'
-  | 'Gas & Fuel'
-  | 'Cleaning & Kitchen Hygiene'
-  | 'Disposables & Packaging'
-  | 'Other Supplies';
-
-export interface InventoryItem {
-  id: string;
-  name: string;
-  category: InventoryCategory;
-  currentStock: number;
-  unit: 'kg' | 'liter' | 'bag' | 'packet' | 'can' | 'piece' | 'cylinder';
-  minStockLevel: number;
-  costPerUnit: number;
-  supplierName?: string;
-  lastRestockedDate?: string;
-  lastUpdated: string;
-  notes?: string;
-}
+// (InventoryCategory and InventoryItem defined above)
 
 export interface InventoryMovement {
   id: string;
@@ -688,6 +719,23 @@ export interface InventorySupplier {
   gstNumber?: string;
   contactPerson?: string;
   isActive: boolean;
+}
+
+export interface CleanPlateNomination {
+  id: string;
+  customerId?: string;
+  customerName?: string;
+  studentName?: string;
+  phone?: string;
+  customerPhone?: string;
+  cleanDaysCount?: number;
+  status: 'PENDING' | 'PENDING_DECISION' | 'APPROVED_WINNER' | 'REJECTED';
+  monthYear?: string;
+  createdMonth?: string;
+  submittedAt?: string;
+  date?: string;
+  awardedDiscountAmount?: number;
+  ownerNotes?: string;
 }
 
 

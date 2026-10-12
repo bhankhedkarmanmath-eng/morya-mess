@@ -148,7 +148,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           <button
             id="btn-add-expense-open"
             onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-orange-600 text-white text-xs font-bold hover:bg-orange-700 shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:to-orange-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Record New Expense</span>
@@ -158,17 +158,17 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-xs text-slate-500 font-medium">Total Recorded Outflow</span>
           <div className="text-2xl font-bold text-rose-600 mt-1">₹{totalAmount.toLocaleString()}</div>
           <span className="text-[11px] text-slate-500">{expenses.length} invoices & vouchers</span>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-xs text-slate-500 font-medium">Ration & Vegetables</span>
           <div className="text-2xl font-bold text-slate-900 mt-1">₹{rationTotal.toLocaleString()}</div>
           <span className="text-[11px] text-emerald-700 font-semibold">Atta, Rice, Dal, Spices, Mandi</span>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-xs text-slate-500 font-medium">Utilities (Gas, Rent, Water, Bijli)</span>
           <div className="text-2xl font-bold text-slate-900 mt-1">₹{utilityTotal.toLocaleString()}</div>
           <span className="text-[11px] text-orange-700 font-semibold">Fixed operational overheads</span>

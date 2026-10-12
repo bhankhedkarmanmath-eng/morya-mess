@@ -15,7 +15,7 @@ export const StudentSupportTab: React.FC<StudentSupportTabProps> = ({
 }) => {
   const messPhone = '+91 98223 34455';
   const messCleanPhone = '919822334455';
-  const messAddress = 'Near Government College Main Gate, Shivaji Nagar, Latur, Maharashtra 413512';
+  const messAddress = 'Near COEP Main Gate, Shivaji Nagar, Pune, Maharashtra 411005';
   const whatsappUrl = `https://wa.me/${messCleanPhone}?text=${encodeURIComponent(
     `Hello Morya Mess Management, I am ${customer.name} (Student ID: ${customer.id}). I need help regarding my mess subscription.`
   )}`;

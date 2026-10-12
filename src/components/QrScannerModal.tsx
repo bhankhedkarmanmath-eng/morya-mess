@@ -24,6 +24,8 @@ import {
   Sun,
   Sparkles
 } from 'lucide-react';
+import { ShiftLastCallBuzzerBanner } from './ShiftLastCallBuzzerBanner';
+import { playScanSuccessBeep } from '../lib/shiftBellAudio';
 
 interface QrScannerModalProps {
   isOpen: boolean;
@@ -320,6 +322,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
     onRecordMeal(scanResult.customer.id, scanResult.eligibility, scanResult.reason, activeMealType);
     setMealMarkedSuccess(true);
     playAudioFeedback('ALLOW');
+    playScanSuccessBeep();
   };
 
   const handleOverrideMeal = () => {
@@ -355,7 +358,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 border border-orange-200 flex items-center justify-center font-bold">
               <Utensils className="w-5 h-5" />
             </div>
             <div>
@@ -371,13 +374,18 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
           </button>
         </div>
 
+        {/* Live Shift Status & Last-Call Auto Buzzer */}
+        <div className="px-5 pt-3 pb-1 bg-white">
+          <ShiftLastCallBuzzerBanner onShiftChange={(s) => setShiftAudit(s)} />
+        </div>
+
         {/* Meal Shift Selector & Automatic Switch Status */}
         <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100 space-y-2 text-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-orange-600" />
               <span className="font-bold text-slate-800">
-                Shift: <span className="capitalize text-orange-700">{activeMealType}</span>
+                Shift: <span className="capitalize text-orange-700 font-bold">{activeMealType}</span>
               </span>
               <span className="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-1.5 py-0.5 rounded">
                 ⚡ Auto-Switched by Clock
@@ -390,7 +398,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                   onClick={() => setActiveMealType(type)}
                   className={`px-2.5 py-1 rounded-md text-[10px] font-bold capitalize transition-all cursor-pointer ${
                     activeMealType === type
-                      ? 'bg-orange-600 text-white shadow-xs'
+                      ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
@@ -434,7 +442,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
         {/* Automatic Attendance Indicator */}
         <div className="px-5 py-2 bg-orange-50/70 border-b border-orange-100 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5 text-orange-950 font-bold">
+          <div className="flex items-center gap-1.5 text-orange-800 font-bold">
             <Zap className="w-3.5 h-3.5 text-orange-600 fill-orange-600" />
             <span>Automatic Attendance Active</span>
           </div>
@@ -606,6 +614,39 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                   {scanResult.customer.hostelOrAddress && (
                     <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-600">
                       <span className="text-slate-500">Hostel:</span> {scanResult.customer.hostelOrAddress}
+                    </div>
+                  )}
+
+                  {/* Overdue Gate Alert & WhatsApp UPI Link Button */}
+                  {scanResult.customer.balance > 0 && (
+                    <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-rose-900 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-rose-600" />
+                          <span>Pending Balance: ₹{scanResult.customer.balance}</span>
+                        </span>
+                        <span className="text-[10px] bg-rose-200 text-rose-800 px-2 py-0.5 rounded font-extrabold">
+                          Overdue
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const cust = scanResult.customer!;
+                          const upiId = rules.upiId || 'moryamess@upi';
+                          const messName = rules.messName || 'Morya Mess';
+                          const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(messName)}&am=${cust.balance}&cu=INR`;
+                          const text = `🙏 Namaskar *${cust.name}* ji,\n\nAapki *${messName}* ki monthly mess fees *₹${cust.balance}* pending hai.\n\n⚡ *Niche diye UPI link se turant pay karein:*\n👉 ${upiUrl}\n\n*Mess UPI ID:* \`${upiId}\`\n\nDhanyawad!\n_${messName} Management_`;
+                          const cleanPhone = cust.phone ? cust.phone.replace(/[^0-9]/g, '') : '';
+                          const waUrl = cleanPhone 
+                            ? `https://wa.me/91${cleanPhone.slice(-10)}?text=${encodeURIComponent(text)}`
+                            : `https://wa.me/?text=${encodeURIComponent(text)}`;
+                          window.open(waUrl, '_blank');
+                        }}
+                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Send WhatsApp UPI Payment Link</span>
+                      </button>
                     </div>
                   )}
                 </div>

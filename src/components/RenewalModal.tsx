@@ -74,7 +74,7 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-orange-50/80 border border-orange-200/70 text-orange-900 flex items-center justify-center">
               <RefreshCw className="w-4 h-4" />
             </div>
             <div>
@@ -195,7 +195,7 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
             <button
               id="btn-confirm-renewal"
               type="submit"
-              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-orange-600 text-white font-bold hover:bg-orange-700 shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:to-orange-800 text-white font-bold shadow-xs cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>Confirm Renewal</span>

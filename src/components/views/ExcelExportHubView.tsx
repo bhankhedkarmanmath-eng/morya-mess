@@ -290,6 +290,36 @@ export const ExcelExportHubView: React.FC<ExcelExportHubViewProps> = ({
     }
   };
 
+  // 7. Export Trial Students Report
+  const handleExportTrials = () => {
+    if (trials.length === 0) {
+      triggerFeedback('trials', 'No trial student records available.', 'error');
+      return;
+    }
+
+    const data = trials.map(t => ({
+      'Trial ID': t.id,
+      'Name': t.name || (t as any).fullName,
+      'Phone': t.phone,
+      'Visit Date': t.date || (t as any).startDate,
+      'Amount Paid (INR)': Number(t.amountPaid || 70),
+      'Converted to Monthly': t.convertedToMonthly ? 'YES' : 'NO',
+      'Notes': t.notes || ''
+    }));
+
+    const result = exportToSpreadsheet(data, {
+      filename: `Morya_Mess_Trial_Students_${todayStr}`,
+      sheetName: 'Trial_Students',
+      format: selectedFormat
+    });
+
+    if (result.success) {
+      triggerFeedback('trials', `Exported ${data.length} trial student records!`, 'success');
+    } else {
+      triggerFeedback('trials', result.message || 'Export failed.', 'error');
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       {/* Top Header */}
@@ -646,6 +676,47 @@ export const ExcelExportHubView: React.FC<ExcelExportHubViewProps> = ({
             >
               <Download className="w-4 h-4" />
               <span>Export P&L Summary (.{selectedFormat})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 7: Trial Students & Standee Scans */}
+        <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-slate-900">7. Trial Students & Guests</h3>
+                  <span className="text-[11px] text-slate-400 font-mono">{trials.length} trial diner records</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                Standee Scans
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Download list of 1-day trial diner passes generated via QR standee, payment fees collected, phone numbers, and conversion status.
+            </p>
+          </div>
+
+          <div className="pt-2 space-y-2">
+            {exportFeedback?.id === 'trials' && (
+              <div className={`p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                exportFeedback.type === 'success' ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
+              }`}>
+                {exportFeedback.type === 'success' ? <Check className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                <span>{exportFeedback.message}</span>
+              </div>
+            )}
+            <button
+              onClick={handleExportTrials}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export Trial Guests (.{selectedFormat})</span>
             </button>
           </div>
         </div>

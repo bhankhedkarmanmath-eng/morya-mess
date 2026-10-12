@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Customer, Expense, TrialVisitor, Worker } from '../types/mess';
-import { calculateDaysRemaining, getTodayString } from '../lib/storage';
+import { Customer, Expense, TrialVisitor, Worker, CleanPlateNomination } from '../types/mess';
+import { calculateDaysRemaining, getTodayString, loadRules } from '../lib/storage';
 import { exportToSpreadsheet } from '../lib/exportUtils';
+import { loadCleanPlateNominations, saveCleanPlateNominations } from '../lib/ownerModulesStorage';
 import { 
   TrendingUp, 
   AlertCircle, 
@@ -19,7 +20,10 @@ import {
   ShieldCheck,
   XCircle,
   FileSpreadsheet,
-  Download
+  Download,
+  QrCode,
+  Sparkles,
+  Trophy
 } from 'lucide-react';
 
 interface AuditAndReportsViewProps {
@@ -33,6 +37,8 @@ interface AuditAndReportsViewProps {
   onConvertTrialToCustomer: (trial: TrialVisitor) => void;
   onApproveLeave?: (customerId: string, leaveId: string, days: number) => void;
   onRejectLeave?: (customerId: string, leaveId: string) => void;
+  onOpenTrialQr?: () => void;
+  onOpenPredictCampaignResults?: () => void;
   initialTab?: 'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals';
   onTabChange?: (tab: 'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals') => void;
 }
@@ -48,12 +54,43 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
   onConvertTrialToCustomer,
   onApproveLeave,
   onRejectLeave,
+  onOpenTrialQr,
+  onOpenPredictCampaignResults,
   initialTab,
   onTabChange
 }) => {
   const today = getTodayString();
-  const [activeTab, setActiveTab] = useState<'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals'>(initialTab || 'pnl');
-  const [leaveFilter, setLeaveFilter] = useState<'ALL' | 'PENDING' | 'APPROVED'>('PENDING');
+  const rules = loadRules();
+  const [activeTab, setActiveTab] = useState<'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals' | 'clean_plate'>(initialTab || 'pnl');
+  const [leaveFilter, setLeaveFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
+
+  // Clean Plate Nominations State
+  const [cleanPlateNoms, setCleanPlateNoms] = useState<CleanPlateNomination[]>(() => loadCleanPlateNominations());
+
+  useEffect(() => {
+    const handleCPUpdate = () => {
+      setCleanPlateNoms(loadCleanPlateNominations());
+    };
+    window.addEventListener('morya_clean_plate_updated', handleCPUpdate);
+    window.addEventListener('storage', handleCPUpdate);
+    return () => {
+      window.removeEventListener('morya_clean_plate_updated', handleCPUpdate);
+      window.removeEventListener('storage', handleCPUpdate);
+    };
+  }, []);
+
+  const handleApproveCleanPlate = (nomId: string) => {
+    const updated = cleanPlateNoms.map(n => n.id === nomId ? { ...n, status: 'APPROVED_WINNER' as const, awardedDiscountAmount: 50 } : n);
+    setCleanPlateNoms(updated);
+    saveCleanPlateNominations(updated);
+    alert('🏆 Winner Selected! ₹50 Discount Awarded for Clean Plate Campaign.');
+  };
+
+  const handleRejectCleanPlate = (nomId: string) => {
+    const updated = cleanPlateNoms.map(n => n.id === nomId ? { ...n, status: 'REJECTED' as const } : n);
+    setCleanPlateNoms(updated);
+    saveCleanPlateNominations(updated);
+  };
 
   useEffect(() => {
     if (initialTab) {
@@ -61,9 +98,9 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
     }
   }, [initialTab]);
 
-  const handleSelectTab = (tab: 'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals') => {
+  const handleSelectTab = (tab: 'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals' | 'clean_plate') => {
     setActiveTab(tab);
-    onTabChange?.(tab);
+    onTabChange?.(tab as any);
   };
 
   // Add Trial state
@@ -112,10 +149,14 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
     }))
   ).sort((a, b) => new Date(b.createdAt || b.startDate).getTime() - new Date(a.createdAt || a.startDate).getTime());
 
-  const pendingLeaves = allLeaves.filter(l => !l.approved);
+  const pendingLeaves = allLeaves.filter(l => !l.approved && l.status !== 'rejected');
+  const approvedLeaves = allLeaves.filter(l => l.approved || l.status === 'approved');
+  const rejectedLeaves = allLeaves.filter(l => l.status === 'rejected');
+
   const filteredLeaves = allLeaves.filter(l => {
-    if (leaveFilter === 'PENDING') return !l.approved;
-    if (leaveFilter === 'APPROVED') return l.approved;
+    if (leaveFilter === 'PENDING') return !l.approved && l.status !== 'rejected';
+    if (leaveFilter === 'APPROVED') return l.approved || l.status === 'approved';
+    if (leaveFilter === 'REJECTED') return l.status === 'rejected';
     return true;
   });
 
@@ -249,7 +290,7 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
             <button
               id="btn-add-trial-visitor"
               onClick={() => setIsAddTrialOpen(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-orange-600 text-white text-xs font-bold hover:bg-orange-700 shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:to-orange-800 text-white text-xs font-bold shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Record Trial Visitor (1 or 2 Days)</span>
@@ -259,7 +300,7 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 gap-6 text-xs font-bold text-slate-500">
+      <div className="flex border-b border-slate-200/90 gap-6 text-xs font-bold text-slate-500">
         <button
           id="tab-pnl"
           onClick={() => handleSelectTab('pnl')}
@@ -306,6 +347,23 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
           {pendingLeaves.length > 0 && (
             <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white">
               {pendingLeaves.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          id="tab-clean-plate"
+          onClick={() => handleSelectTab('clean_plate')}
+          className={`pb-3 relative cursor-pointer transition-colors flex items-center gap-1.5 ${
+            activeTab === 'clean_plate'
+              ? 'text-orange-600 border-b-2 border-orange-600'
+              : 'hover:text-slate-900'
+          }`}
+        >
+          <span>🌿 Clean Plate Nominations</span>
+          {cleanPlateNoms.filter(n => n.status === 'PENDING').length > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white">
+              {cleanPlateNoms.filter(n => n.status === 'PENDING').length}
             </span>
           )}
         </button>
@@ -464,12 +522,25 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-600">{c.phone}</td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => onOpenRenew(c)}
-                              className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer"
-                            >
-                              Renew Now
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+                                  const msg = `Namaste ${c.name} ji! 🙏 Gentle reminder from Morya Mess: Your dining pass expired on ${c.endDate}. Please renew today to continue meals. Pay via UPI: ${rules.upiId || 'moryamess@upi'}. Thank you!`;
+                                  window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-500 text-white font-bold text-xs hover:bg-emerald-600 cursor-pointer flex items-center gap-1"
+                                title="Send WhatsApp Renewal Reminder"
+                              >
+                                <span>📱 Remind</span>
+                              </button>
+                              <button
+                                onClick={() => onOpenRenew(c)}
+                                className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer"
+                              >
+                                Renew Now
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -518,12 +589,25 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-600">{c.phone}</td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => onOpenRenew(c)}
-                              className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer"
-                            >
-                              Renew Card
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+                                  const msg = `Namaste ${c.name} ji! 🙏 Friendly reminder from Morya Mess: Your dining pass expires on ${c.endDate}. Renew early to avoid meal interruption. Pay via UPI: ${rules.upiId || 'moryamess@upi'}. Thank you!`;
+                                  window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-500 text-white font-bold text-xs hover:bg-emerald-600 cursor-pointer flex items-center gap-1"
+                                title="Send WhatsApp Renewal Reminder"
+                              >
+                                <span>📱 Remind</span>
+                              </button>
+                              <button
+                                onClick={() => onOpenRenew(c)}
+                                className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer"
+                              >
+                                Renew Card
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -582,6 +666,37 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
       {/* Tab 3: Trial Diners Tracker */}
       {activeTab === 'trials' && (
         <div className="space-y-4">
+          {/* Header Action Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+            <div>
+              <h3 className="font-extrabold text-sm sm:text-base text-slate-800">
+                Trial Students & Guest Dining Entries ({trials.length})
+              </h3>
+              <p className="text-xs text-slate-500">
+                Total Trial Revenue Collected: <strong className="text-emerald-700 font-bold">₹{trialRevenue}</strong>
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {onOpenTrialQr && (
+                <button
+                  onClick={onOpenTrialQr}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition shadow-2xs cursor-pointer"
+                  title="Open Trial Student QR Standee"
+                >
+                  <QrCode className="w-4 h-4 text-emerald-600" />
+                  <span>📱 Trial Student QR Standee</span>
+                </button>
+              )}
+              <button
+                onClick={() => setIsAddTrialOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold transition shadow-xs shadow-orange-500/20 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Manual Trial Entry</span>
+              </button>
+            </div>
+          </div>
+
           {trials.length === 0 ? (
             <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 space-y-3">
               <UserCheck className="w-12 h-12 text-slate-300 mx-auto" />
@@ -604,7 +719,7 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                   <tr>
                     <th className="px-4 py-3 font-semibold">Date</th>
                     <th className="px-4 py-3 font-semibold">Student Name</th>
-                    <th className="px-4 py-3 font-semibold">College / Hostel</th>
+                    <th className="px-4 py-3 font-semibold">Meal / Shift Type</th>
                     <th className="px-4 py-3 font-semibold">Trial Period</th>
                     <th className="px-4 py-3 font-semibold">Paid (₹)</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
@@ -612,44 +727,75 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {trials.map(t => (
-                    <tr key={t.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3 font-mono text-slate-500">{t.date}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-bold text-slate-900">{t.name}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">{t.phone}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{t.college || 'N/A'}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-slate-800">
-                          {t.visitType === '1_day_trial' ? '1-Day Trial' : '2-Day Trial'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-bold text-emerald-600">₹{t.amountPaid}</td>
-                      <td className="px-4 py-3">
-                        {t.convertedToMonthly ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Converted to Monthly</span>
+                  {trials.map(t => {
+                    const notesLower = (t.notes || '').toLowerCase();
+                    const isDinner = t.mealType === 'dinner' || notesLower.includes('dinner') || notesLower.includes('night');
+                    const shiftText = isDinner ? 'DINNER' : 'LUNCH';
+                    
+                    let foodItemText = t.foodItem || '';
+                    if (!foodItemText && t.notes) {
+                      if (t.notes.includes('Food:')) {
+                        foodItemText = t.notes.split('Food:')[1]?.split(';')[0]?.trim() || '';
+                      } else if (t.notes.includes('ITEM:')) {
+                        foodItemText = t.notes.split('ITEM:')[1]?.split(';')[0]?.trim() || '';
+                      }
+                    }
+                    if (!foodItemText) {
+                      foodItemText = t.amountPaid === 50 ? 'Rice and Dal' : 'Regular Veg Thali';
+                    }
+
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3 font-mono text-slate-500 font-semibold">{t.date}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-bold text-slate-900">{t.name}</div>
+                          <div className="text-[11px] text-slate-500 font-mono">{t.phone}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                              isDinner 
+                                ? 'bg-purple-100 text-purple-900 border border-purple-200' 
+                                : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                            }`}>
+                              {shiftText}
+                            </span>
+                            <span className="font-bold text-slate-800 text-xs">
+                              {foodItemText}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-slate-800">
+                            {t.visitType === '1_day_trial' ? '1-Day Trial' : '2-Day Trial'}
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-50 text-orange-700">
-                            <span>Trial Only</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {!t.convertedToMonthly && (
-                          <button
-                            onClick={() => onConvertTrialToCustomer(t)}
-                            className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer"
-                          >
-                            Convert to Member
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 font-black text-emerald-700">₹{t.amountPaid}</td>
+                        <td className="px-4 py-3">
+                          {t.convertedToMonthly ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Converted to Monthly</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-orange-50 text-orange-700">
+                              <span>Trial Only</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {!t.convertedToMonthly && (
+                            <button
+                              onClick={() => onConvertTrialToCustomer(t)}
+                              className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer"
+                            >
+                              Convert to Member
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -684,7 +830,7 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
           </div>
 
           {/* Filter Bar */}
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold">
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold flex-wrap">
             <button
               onClick={() => setLeaveFilter('PENDING')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -703,7 +849,17 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Approved ({allLeaves.filter(l => l.approved).length})
+              Approved ({approvedLeaves.length})
+            </button>
+            <button
+              onClick={() => setLeaveFilter('REJECTED')}
+              className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                leaveFilter === 'REJECTED'
+                  ? 'bg-rose-100 text-rose-900 font-extrabold'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Rejected ({rejectedLeaves.length})
             </button>
             <button
               onClick={() => setLeaveFilter('ALL')}
@@ -734,12 +890,14 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                 const currentEnd = new Date(leave.customerEndDate);
                 const projectedEnd = new Date(currentEnd);
                 projectedEnd.setDate(projectedEnd.getDate() + leave.days);
+                const isRejected = leave.status === 'rejected';
+                const isApproved = leave.approved || leave.status === 'approved';
 
                 return (
                   <div 
                     key={leave.id}
                     className={`p-5 rounded-2xl bg-white border transition-shadow shadow-xs space-y-4 ${
-                      !leave.approved ? 'border-amber-300 shadow-amber-500/5' : 'border-slate-200'
+                      isRejected ? 'border-rose-200 bg-rose-50/10' : !isApproved ? 'border-amber-300 shadow-amber-500/5' : 'border-slate-200'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -762,18 +920,25 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                       </div>
 
                       <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold inline-flex items-center gap-1 ${
-                        leave.approved
+                        isApproved
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : isRejected
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
                           : 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
                       }`}>
-                        {leave.approved ? (
+                        {isApproved ? (
                           <>
-                            <CheckCircle2 className="w-3 h-3" />
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>Approved</span>
+                          </>
+                        ) : isRejected ? (
+                          <>
+                            <X className="w-3 h-3 text-rose-600" />
+                            <span>Rejected</span>
                           </>
                         ) : (
                           <>
-                            <Clock className="w-3 h-3" />
+                            <Clock className="w-3 h-3 text-amber-600" />
                             <span>Pending Review</span>
                           </>
                         )}
@@ -795,27 +960,29 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px]">
-                        <span className="text-slate-500">Extension:</span>
-                        <span className="text-emerald-700 font-bold">
-                          {leave.customerEndDate} ➔ {projectedEnd.toISOString().split('T')[0]} (+{leave.days}d)
+                        <span className="text-slate-500">Extension Status:</span>
+                        <span className={`font-bold ${isApproved ? 'text-emerald-700' : isRejected ? 'text-rose-600' : 'text-slate-600'}`}>
+                          {isApproved 
+                            ? `${leave.customerEndDate} ➔ ${projectedEnd.toISOString().split('T')[0]} (+${leave.days}d)`
+                            : isRejected 
+                            ? 'No Extension (Request Rejected)' 
+                            : `Pending (+${leave.days}d proposed)`}
                         </span>
                       </div>
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
-                      {!leave.approved ? (
+                      {!isApproved && !isRejected ? (
                         <>
                           {onRejectLeave && (
                             <button
                               onClick={() => {
-                                if (window.confirm(`Reject leave request for ${leave.customerName}?`)) {
-                                  onRejectLeave(leave.customerId, leave.id);
-                                }
+                                onRejectLeave(leave.customerId, leave.id);
                               }}
-                              className="px-3 py-1.5 rounded-xl border border-slate-200 text-rose-600 hover:bg-rose-50 font-bold text-xs transition-colors cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-xs transition-colors cursor-pointer"
                             >
-                              Reject
+                              Reject Request
                             </button>
                           )}
                           {onApproveLeave && (
@@ -828,16 +995,138 @@ export const AuditAndReportsView: React.FC<AuditAndReportsViewProps> = ({
                             </button>
                           )}
                         </>
-                      ) : (
-                        <div className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                      ) : isApproved ? (
+                        <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Approved & Subscription Extended</span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+                          <X className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Leave Application Rejected</span>
                         </div>
                       )}
                     </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 5: Clean Plate Campaign Nominations Management */}
+      {activeTab === 'clean_plate' && (
+        <div className="space-y-6">
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🌿</span>
+                <h3 className="text-base font-extrabold text-white">
+                  Clean Plate Campaign Nominations
+                </h3>
+              </div>
+              <p className="text-xs text-emerald-100">
+                Review automated student entries for 25+ days zero food wastage. Pick up to 5 Winners each month for ₹50 renewal discount.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <div className="flex items-center gap-2 bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-400/30 text-xs font-bold text-amber-200">
+                <span>Winners:</span>
+                <strong className="text-white text-sm font-black font-mono">
+                  {cleanPlateNoms.filter(n => n.status === 'APPROVED_WINNER').length} / 5
+                </strong>
+              </div>
+
+              {onOpenPredictCampaignResults && (
+                <button
+                  onClick={onOpenPredictCampaignResults}
+                  className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-xs shadow-md transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trophy className="w-4 h-4 text-emerald-900" />
+                  <span>🏆 Predict 5 Campaign Winners</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {cleanPlateNoms.length === 0 ? (
+            <div className="p-10 rounded-2xl bg-white border border-slate-200 text-center space-y-2">
+              <span className="text-3xl">🌿</span>
+              <h4 className="font-extrabold text-slate-800 text-sm">No Nominations Submitted Yet</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Students can nominate themselves from their Student Portal when they complete 25+ days of zero food waste.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-700 border-b border-slate-200 font-bold">
+                  <tr>
+                    <th className="px-4 py-3">Student / Member</th>
+                    <th className="px-4 py-3">Clean Days Streak</th>
+                    <th className="px-4 py-3">Month</th>
+                    <th className="px-4 py-3">Submitted At</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Owner Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {cleanPlateNoms.map(nom => (
+                    <tr key={nom.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-slate-900">{nom.customerName || nom.studentName || 'Student Contender'}</div>
+                        <div className="text-[10px] font-mono text-slate-500">{nom.customerId || nom.id} &bull; {nom.customerPhone || nom.phone || 'N/A'}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[11px] font-mono">
+                          {nom.cleanDaysCount || 25} Days Clean Plate
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-600">{nom.monthYear || nom.createdMonth || today}</td>
+                      <td className="px-4 py-3 text-slate-500 text-[11px]">
+                        {nom.submittedAt ? new Date(nom.submittedAt).toLocaleDateString() : (nom.date || today)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {nom.status === 'APPROVED_WINNER' ? (
+                          <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-black text-[10px] border border-amber-300">
+                            🏆 WINNER SELECTED (₹50 OFF)
+                          </span>
+                        ) : nom.status === 'REJECTED' ? (
+                          <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+                            REJECTED / DISMISSED
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] animate-pulse">
+                            PENDING OWNER REVIEW
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {nom.status === 'PENDING' ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleRejectCleanPlate(nom.id)}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              onClick={() => handleApproveCleanPlate(nom.id)}
+                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition cursor-pointer shadow-xs"
+                            >
+                              🏆 Select Winner (₹50 Off)
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-bold">Action Completed</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

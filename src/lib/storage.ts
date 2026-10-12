@@ -76,7 +76,7 @@ export const DEFAULT_BUSINESS_RULES: BusinessRulesConfig = {
   address: 'Near Girls Hostel Complex, College Road',
   currency: '₹',
   upiId: 'moryamess@upi',
-  upiPayeeName: 'Morya Mess Latur',
+  upiPayeeName: 'Morya Mess Pune',
   upiQrCodeImage: '',
   messStatus: 'open',
   messClosureReason: '',
@@ -93,8 +93,8 @@ export const DEFAULT_BUSINESS_RULES: BusinessRulesConfig = {
   shortTermThresholdDays: 3,
   requirePaymentBeforeMeal: false,
   mealTypes: [
-    { type: 'lunch', name: 'Lunch Shift', startTime: '11:00', endTime: '14:30', enabled: true },
-    { type: 'dinner', name: 'Dinner Shift', startTime: '19:30', endTime: '22:15', enabled: true }
+    { type: 'lunch', name: 'Lunch Shift', startTime: '10:30', endTime: '14:30', enabled: true },
+    { type: 'dinner', name: 'Dinner Shift', startTime: '19:30', endTime: '21:45', enabled: true }
   ]
 };
 
@@ -130,39 +130,60 @@ export interface MessShiftAudit {
   shiftTimingLabel: string;
   reason: string;
   isSundayNightClosed: boolean;
+  minutesRemainingInShift?: number;
+  isLast15MinutesCall?: boolean;
+  nextShiftLabel?: string;
 }
 
 // Strict Mess Timings Engine matching Supabase Morya Mess settings:
-// Lunch: 11:00 AM to 02:30 PM (Daily, including Sunday)
-// Dinner: 07:30 PM to 10:15 PM (Mon-Sat, Sunday Night Strictly Closed)
+// Lunch: 10:30 AM to 03:00 PM (Daily, including Sunday)
+// Dinner: 08:00 PM to 11:00 PM (Mon-Sat, Sunday Night Strictly Closed)
 export function evaluateStrictMessShift(now: Date = new Date()): MessShiftAudit {
-  const day = now.getDay(); // 0 = Sunday
+  let day = now.getDay(); // 0 = Sunday
+  let hours = now.getHours();
+  let minutes = now.getMinutes();
+
+  try {
+    const formatterStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    const istDate = new Date(formatterStr);
+    if (!isNaN(istDate.getTime())) {
+      day = istDate.getDay();
+      hours = istDate.getHours();
+      minutes = istDate.getMinutes();
+    }
+  } catch (e) {
+    console.error('Error shifting time to IST:', e);
+  }
+
   const isSunday = day === 0;
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
   const currentMinutes = hours * 60 + minutes;
 
-  // 11:00 AM (660) to 02:30 PM (870)
-  const lunchStart = 11 * 60;      // 660
-  const lunchEnd = 14 * 60 + 30;   // 870
+  // 10:30 AM (630) to 02:30 PM (870)
+  const lunchStart = 10 * 60 + 30;      // 630
+  const lunchEnd = 14 * 60 + 30;        // 870
 
-  // 07:30 PM (1170) to 10:15 PM (1335)
-  const dinnerStart = 19 * 60 + 30; // 1170
-  const dinnerEnd = 22 * 60 + 15;   // 1335
+  // 07:30 PM (1170) to 09:45 PM (1305)
+  const dinnerStart = 19 * 60 + 30;     // 1170
+  const dinnerEnd = 21 * 60 + 45;       // 1305
 
   // 1. Lunch Shift Window (Active Mon-Sun)
   if (currentMinutes >= lunchStart && currentMinutes <= lunchEnd) {
+    const minsLeft = lunchEnd - currentMinutes;
+    const isLast15 = minsLeft <= 15 && minsLeft > 0;
     return {
       isShiftActive: true,
       mealType: 'lunch',
-      shiftTitle: 'Lunch Shift Active',
-      shiftTimingLabel: '11:00 AM – 02:30 PM',
-      reason: 'Gate is open for Lunch scan.',
-      isSundayNightClosed: false
+      shiftTitle: isLast15 ? '⚠️ Lunch Shift Last Call (15m Left)' : 'Lunch Shift Active',
+      shiftTimingLabel: '10:30 AM – 02:30 PM',
+      reason: isLast15 ? 'Last 15 minutes call! Final batch of rotis before 02:30 PM closing.' : 'Gate is open for Lunch scan.',
+      isSundayNightClosed: false,
+      minutesRemainingInShift: minsLeft,
+      isLast15MinutesCall: isLast15,
+      nextShiftLabel: isSunday ? 'Monday Lunch 10:30 AM' : 'Dinner Shift 07:30 PM'
     };
   }
 
-  // 2. Dinner Shift Window (07:30 PM - 10:15 PM)
+  // 2. Dinner Shift Window (07:30 PM - 09:45 PM)
   if (currentMinutes >= dinnerStart && currentMinutes <= dinnerEnd) {
     if (isSunday) {
       return {
@@ -171,16 +192,24 @@ export function evaluateStrictMessShift(now: Date = new Date()): MessShiftAudit 
         shiftTitle: 'Sunday Night Mess Closed',
         shiftTimingLabel: 'Sunday Dinner: CLOSED',
         reason: 'Sunday Night Mess is strictly closed. No dinner scans permitted.',
-        isSundayNightClosed: true
+        isSundayNightClosed: true,
+        minutesRemainingInShift: 0,
+        isLast15MinutesCall: false,
+        nextShiftLabel: 'Monday Lunch 10:30 AM'
       };
     }
+    const minsLeft = dinnerEnd - currentMinutes;
+    const isLast15 = minsLeft <= 15 && minsLeft > 0;
     return {
       isShiftActive: true,
       mealType: 'dinner',
-      shiftTitle: 'Dinner Shift Active',
-      shiftTimingLabel: '07:30 PM – 10:15 PM',
-      reason: 'Gate is open for Dinner scan.',
-      isSundayNightClosed: false
+      shiftTitle: isLast15 ? '⚠️ Dinner Shift Last Call (15m Left)' : 'Dinner Shift Active',
+      shiftTimingLabel: '07:30 PM – 09:45 PM',
+      reason: isLast15 ? 'Last 15 minutes call! Final service before 09:45 PM closing.' : 'Gate is open for Dinner scan.',
+      isSundayNightClosed: false,
+      minutesRemainingInShift: minsLeft,
+      isLast15MinutesCall: isLast15,
+      nextShiftLabel: 'Tomorrow Lunch 10:30 AM'
     };
   }
 
@@ -189,10 +218,13 @@ export function evaluateStrictMessShift(now: Date = new Date()): MessShiftAudit 
     return {
       isShiftActive: false,
       mealType: 'lunch',
-      shiftTitle: 'Mess Closed (Opens at 11:00 AM)',
-      shiftTimingLabel: 'Lunch Shift: 11:00 AM – 02:30 PM',
-      reason: 'Lunch shift starts at 11:00 AM. Shift timing strictly enforced.',
-      isSundayNightClosed: false
+      shiftTitle: 'Mess Closed (Opens at 10:30 AM)',
+      shiftTimingLabel: 'Lunch Shift: 10:30 AM – 02:30 PM',
+      reason: 'Lunch shift starts at 10:30 AM. Shift timing strictly enforced.',
+      isSundayNightClosed: false,
+      minutesRemainingInShift: 0,
+      isLast15MinutesCall: false,
+      nextShiftLabel: 'Today Lunch 10:30 AM'
     };
   } else if (currentMinutes > lunchEnd && currentMinutes < dinnerStart) {
     if (isSunday) {
@@ -201,33 +233,54 @@ export function evaluateStrictMessShift(now: Date = new Date()): MessShiftAudit 
         mealType: 'lunch',
         shiftTitle: 'Sunday Lunch Ended (Night Closed)',
         shiftTimingLabel: 'Sunday Dinner: CLOSED',
-        reason: 'Sunday lunch ended at 2:30 PM. Mess is closed on Sunday dinner. Next meal on Monday 11:00 AM.',
-        isSundayNightClosed: true
+        reason: 'Sunday lunch ended at 02:30 PM. Mess is closed on Sunday dinner. Next meal on Monday 10:30 AM.',
+        isSundayNightClosed: true,
+        minutesRemainingInShift: 0,
+        isLast15MinutesCall: false,
+        nextShiftLabel: 'Monday Lunch 10:30 AM'
       };
     }
     return {
       isShiftActive: false,
       mealType: 'dinner',
       shiftTitle: 'Mess Closed (Afternoon Gap)',
-      shiftTimingLabel: 'Next Shift: Dinner 07:30 PM – 10:15 PM',
-      reason: 'Lunch ended at 2:30 PM. Dinner shift begins at 7:30 PM. Timing strictly enforced.',
-      isSundayNightClosed: false
+      shiftTimingLabel: 'Next Shift: Dinner 07:30 PM – 09:45 PM',
+      reason: 'Lunch ended at 02:30 PM. Dinner shift begins at 07:30 PM. Timing strictly enforced.',
+      isSundayNightClosed: false,
+      minutesRemainingInShift: 0,
+      isLast15MinutesCall: false,
+      nextShiftLabel: 'Dinner Shift 07:30 PM'
     };
   } else {
-    // Past 10:15 PM
+    // Past 09:45 PM
     return {
       isShiftActive: false,
       mealType: 'dinner',
       shiftTitle: 'Mess Closed for the Night',
-      shiftTimingLabel: 'Next Shift: Tomorrow Lunch 11:00 AM',
-      reason: 'Dinner closed at 10:15 PM. Gate closed. No more meal scans permitted tonight.',
-      isSundayNightClosed: false
+      shiftTimingLabel: 'Next Shift: Tomorrow Lunch 10:30 AM',
+      reason: 'Dinner closed at 09:45 PM. Gate closed. No more meal scans permitted tonight.',
+      isSundayNightClosed: false,
+      minutesRemainingInShift: 0,
+      isLast15MinutesCall: false,
+      nextShiftLabel: 'Tomorrow Lunch 10:30 AM'
     };
   }
 }
 
 // Safe date helpers
 export function getTodayString(): string {
+  try {
+    const formatterStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    const istDate = new Date(formatterStr);
+    if (!isNaN(istDate.getTime())) {
+      const year = istDate.getFullYear();
+      const month = String(istDate.getMonth() + 1).padStart(2, '0');
+      const day = String(istDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  } catch (e) {
+    console.error('Error shifting today string to IST:', e);
+  }
   const d = new Date();
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -236,7 +289,17 @@ export function getTodayString(): string {
 }
 
 export function getCurrentTimeString(): string {
-  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  try {
+    return new Date().toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
 }
 
 export function calculateDaysRemaining(endDateStr: string): number {
@@ -298,9 +361,66 @@ export function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
+const DELETED_CUSTOMERS_KEY = `${STORAGE_PREFIX}deleted_customer_ids`;
+
+export function loadDeletedCustomerIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_CUSTOMERS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set<string>(arr);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return new Set<string>();
+}
+
+export function saveDeletedCustomerId(id: string): void {
+  if (!id) return;
+  try {
+    const set = loadDeletedCustomerIds();
+    set.add(id);
+    localStorage.setItem(DELETED_CUSTOMERS_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // ignore
+  }
+}
+
+export function removeDeletedCustomerId(id: string): void {
+  if (!id) return;
+  try {
+    const set = loadDeletedCustomerIds();
+    if (set.has(id)) {
+      set.delete(id);
+      localStorage.setItem(DELETED_CUSTOMERS_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function saveDeletedCustomerIds(ids: string[]): void {
+  if (!ids || ids.length === 0) return;
+  try {
+    const set = loadDeletedCustomerIds();
+    ids.forEach(id => {
+      if (id) set.add(id);
+    });
+    localStorage.setItem(DELETED_CUSTOMERS_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // ignore
+  }
+}
+
 // Convenience typed storage accessors
 export function loadCustomers(): Customer[] {
-  return loadFromStorage<Customer[]>('customers', []);
+  const list = loadFromStorage<Customer[]>('customers', []);
+  const deletedIds = loadDeletedCustomerIds();
+  if (deletedIds.size === 0) return list;
+  return list.filter(c => !deletedIds.has(c.id));
 }
 
 export function saveCustomers(customers: Customer[]): void {
@@ -359,7 +479,14 @@ export function saveTrials(trials: TrialVisitor[]): void {
 export function getStoredBusinessRules(): BusinessRulesConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.BUSINESS_RULES);
-    return raw ? { ...DEFAULT_BUSINESS_RULES, ...JSON.parse(raw) } : DEFAULT_BUSINESS_RULES;
+    const parsed = raw ? { ...DEFAULT_BUSINESS_RULES, ...JSON.parse(raw) } : DEFAULT_BUSINESS_RULES;
+    if (parsed.upiPayeeName && parsed.upiPayeeName.toLowerCase().includes('latur')) {
+      parsed.upiPayeeName = 'Morya Mess Pune';
+    }
+    if (parsed.address && parsed.address.toLowerCase().includes('latur')) {
+      parsed.address = parsed.address.replace(/latur/gi, 'Pune');
+    }
+    return parsed;
   } catch {
     return DEFAULT_BUSINESS_RULES;
   }
@@ -463,13 +590,13 @@ export function auditCustomerMealScan(
     };
   }
 
-  // 2.5 STRICT MESS SHIFT TIMING CHECK (Lunch: 10:30 AM - 2:30 PM, Dinner: 8:30 PM - 10:30 PM, Sunday night closed)
+  // 2.5 STRICT MESS SHIFT TIMING CHECK (Lunch: 10:30 AM - 3:00 PM, Dinner: 8:00 PM - 11:00 PM, Sunday night closed)
   const shiftAudit = evaluateStrictMessShift();
   if (!shiftAudit.isShiftActive) {
     return {
       eligibility: 'BLOCK',
       customer,
-      reason: `MESS CLOSED / OUTSIDE TIMING: ${shiftAudit.reason} [Strict Hours: Lunch 10:30 AM – 2:30 PM | Dinner 8:30 PM – 10:30 PM. Sunday Night Closed].`,
+      reason: `MESS CLOSED / OUTSIDE TIMING: ${shiftAudit.reason} [Strict Hours: Lunch 10:30 AM – 3:00 PM | Dinner 8:00 PM – 11:00 PM. Sunday Night Closed].`,
       alreadyAteToday: false,
       daysRemaining: calculateDaysRemaining(customer.endDate),
       unpaidPenalty: 0,

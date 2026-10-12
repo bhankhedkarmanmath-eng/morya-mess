@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { Customer, UserRole } from '../types/mess';
 import { completeFirstTimePasswordReset } from './supabaseSync';
+import { pullSyncFromServer, syncCredentialToServer } from './syncEngine';
+import { loadCustomers } from './storage';
 
 export type AuthPortal = 'owner' | 'student';
 export type AuthState = 'PORTAL_CHOICE' | 'LOGIN' | 'SET_NEW_PASSWORD' | 'AUTHENTICATED';
@@ -57,7 +59,7 @@ function saveStoredCredentials(creds: Record<string, StoredCredential>): void {
 // Check if an existing user session exists
 export function getSavedSession(): AuthenticatedUser | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const user: AuthenticatedUser = JSON.parse(raw);
     return user;
@@ -68,6 +70,7 @@ export function getSavedSession(): AuthenticatedUser | null {
 
 export function saveSession(user: AuthenticatedUser): void {
   try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
   } catch (err) {
     console.error('Failed to persist session:', err);
@@ -76,11 +79,14 @@ export function saveSession(user: AuthenticatedUser): void {
 
 export function clearSession(): void {
   try {
+    localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
   } catch (err) {
     console.error('Failed to clear session:', err);
   }
 }
+
+export const CANONICAL_OWNER_IDENTIFIER = 'bhankhedkarmanmath3@gmail.com';
 
 /**
  * Authenticate an Owner or Staff member
@@ -102,12 +108,46 @@ export async function authenticateOwnerOrStaff(
     return { success: false, error: 'Please enter your password.' };
   }
 
-  const credentials = loadStoredCredentials();
-  const existingRecord = credentials[identifier];
+  // STRICT CANONICAL OWNER SECURITY CHECK:
+  // Exactly ONE authorized permanent Owner identity is permitted to access the Owner portal.
+  if (identifier !== CANONICAL_OWNER_IDENTIFIER && identifier !== 'admin' && identifier !== 'owner' && !identifier.includes('bhankhedkarmanmath3')) {
+    return {
+      success: false,
+      error: 'Access Denied: This account is not authorized to access the Morya Mess Owner Portal.'
+    };
+  }
 
-  // 1. If permanent password already set for this account
+  const credentials = loadStoredCredentials();
+  const existingRecord = credentials[CANONICAL_OWNER_IDENTIFIER] || credentials[identifier];
+
+  // If Supabase Auth is active and configured
+  if (supabase) {
+    try {
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email: CANONICAL_OWNER_IDENTIFIER,
+        password
+      });
+      if (!authErr && authData.session?.user) {
+        const user: AuthenticatedUser = {
+          id: authData.session.user.id,
+          identifier: CANONICAL_OWNER_IDENTIFIER,
+          name: authData.session.user.user_metadata?.full_name || 'Mess Owner',
+          role: 'owner',
+          mustChangePassword: authData.session.user.user_metadata?.must_change_password === true
+        };
+        if (user.mustChangePassword) {
+          return { success: true, requiresPasswordReset: true, user };
+        }
+        saveSession(user);
+        return { success: true, user };
+      }
+    } catch {
+      // Fall through to local fallback store
+    }
+  }
+
+  // 1. If permanent password already set for canonical owner
   if (existingRecord && !existingRecord.mustChangePassword) {
-    // If they attempt to use the temporary password again, explicitly inform them
     if (password === TEMPORARY_PASSWORD) {
       return {
         success: false,
@@ -117,38 +157,14 @@ export async function authenticateOwnerOrStaff(
 
     const inputHash = await hashPassword(password);
     if (inputHash !== existingRecord.passwordHash) {
-      // Also attempt Supabase Auth in case it was updated on another client
-      if (supabase && identifier.includes('@')) {
-        try {
-          const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-            email: identifier,
-            password
-          });
-          if (!authErr && authData.session?.user) {
-            const user: AuthenticatedUser = {
-              id: authData.session.user.id,
-              identifier,
-              name: existingRecord.name || 'Mess Owner',
-              role: (existingRecord.role as UserRole) || 'owner',
-              mustChangePassword: false
-            };
-            saveSession(user);
-            return { success: true, user };
-          }
-        } catch {
-          // Fall through to invalid credentials
-        }
-      }
-
       return { success: false, error: 'Invalid login credentials. Please check your password.' };
     }
 
-    // Permanent password match!
     const user: AuthenticatedUser = {
       id: existingRecord.id,
-      identifier,
+      identifier: CANONICAL_OWNER_IDENTIFIER,
       name: existingRecord.name || 'Mess Owner',
-      role: existingRecord.role as UserRole,
+      role: 'owner',
       mustChangePassword: false
     };
     saveSession(user);
@@ -157,13 +173,11 @@ export async function authenticateOwnerOrStaff(
 
   // 2. First-time login: Password MUST be 112233
   if (password === TEMPORARY_PASSWORD) {
-    // Verified first-time temporary login!
-    // Block dashboard entry and mandate setting a new permanent password
     const userId = existingRecord?.id || `usr-${Date.now()}`;
     const user: AuthenticatedUser = {
       id: userId,
-      identifier,
-      name: identifier.includes('@') ? identifier.split('@')[0] : identifier,
+      identifier: CANONICAL_OWNER_IDENTIFIER,
+      name: 'Mess Owner',
       role: 'owner',
       mustChangePassword: true
     };
@@ -205,11 +219,26 @@ export async function authenticateStudent(
   }
 
   // Look up student by phone or ID
-  const student = allCustomers.find(
+  let student = allCustomers.find(
     c => c.id.toLowerCase() === cleanId || 
          c.phone.replace(/\D/g, '') === cleanId.replace(/\D/g, '') ||
          c.phone.trim() === cleanId
   );
+
+  // If not found in current memory, pull fresh data from server
+  if (!student) {
+    try {
+      await pullSyncFromServer();
+      const freshCustomers = loadCustomers();
+      student = freshCustomers.find(
+        c => c.id.toLowerCase() === cleanId || 
+             c.phone.replace(/\D/g, '') === cleanId.replace(/\D/g, '') ||
+             c.phone.trim() === cleanId
+      );
+    } catch {
+      // ignore
+    }
+  }
 
   if (!student) {
     return {
@@ -307,6 +336,9 @@ export async function setPermanentPassword(
       updatedAt: new Date().toISOString()
     };
     saveStoredCredentials(credentials);
+
+    // Sync to server so any device can authenticate with this permanent password
+    syncCredentialToServer(storageKey, credentials[storageKey]);
 
     // 2. Synchronize with Supabase Auth & RPC complete_first_time_password_reset if available
     try {

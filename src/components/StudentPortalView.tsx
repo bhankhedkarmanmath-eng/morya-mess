@@ -11,7 +11,8 @@ import {
   MessReminderNotice, 
   WeeklyMenuSchedule,
   MealRatingReview,
-  CustomerComplaint
+  CustomerComplaint,
+  CleanPlateNomination
 } from '../types/mess';
 import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift } from '../lib/storage';
 import { validateAndRecordStudentAttendance } from '../lib/supabaseSync';
@@ -34,7 +35,8 @@ import {
   fetchComplaintsFromSupabase,
   submitStudentComplaint,
   updateStudentProfileInSupabase,
-  subscribeToStudentNotificationsRealtime
+  subscribeToStudentNotificationsRealtime,
+  getNotifBroadcastChannel
 } from '../lib/ownerFeaturesApi';
 import { 
   loadPolls, 
@@ -42,8 +44,16 @@ import {
   loadReminders, 
   DEFAULT_WEEKLY_MENU,
   loadMealRatings,
-  loadComplaints
+  loadComplaints,
+  loadCleanPlateNominations,
+  saveCleanPlateNominations
 } from '../lib/ownerModulesStorage';
+import {
+  CampaignParticipant,
+  getParticipantByPhone,
+  registerStudentNomination,
+  recordStudentDailyTick
+} from '../lib/cleanPlateTaskStorage';
 import {
   StudentPollsTab,
   StudentRatingsTab,
@@ -56,6 +66,8 @@ import {
   AttendanceDisputeModal,
   SmartAlertBanners
 } from './views/student';
+import { AutoMealSkipCard } from './views/student/AutoMealSkipCard';
+import { ShiftLastCallBuzzerBanner } from './ShiftLastCallBuzzerBanner';
 import { 
   Menu,
   X,
@@ -104,7 +116,10 @@ import {
   ChevronUp,
   Users,
   ExternalLink,
-  Lock
+  Lock,
+  Trophy,
+  Fingerprint,
+  Shield
 } from 'lucide-react';
 
 interface StudentPortalViewProps {
@@ -158,7 +173,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
   const today = getTodayString();
   const daysRemaining = calculateDaysRemaining(customer.endDate);
-  const isExpired = daysRemaining < 0;
+  const isExpired = daysRemaining < 0 || customer.status === 'expired' || customer.status === 'inactive';
   const isExpiringSoon = daysRemaining >= 0 && daysRemaining <= 3;
   const standardFee = getStandardFee(customer.gender, customer.planType);
 
@@ -170,6 +185,60 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // Modals (Feature 20)
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isAccountSwitchOpen, setIsAccountSwitchOpen] = useState(false);
+
+  // Automated Clean Plate Campaign Nomination State
+  const currentMonthYear = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const [campaignParticipant, setCampaignParticipant] = useState<CampaignParticipant | undefined>(() => 
+    getParticipantByPhone(customer.phone)
+  );
+  const [isNominateModalOpen, setIsNominateModalOpen] = useState(false);
+  const [nominateCollege, setNominateCollege] = useState(customer.college || '');
+  const [nominatePledge, setNominatePledge] = useState('Finishing every meal with zero wastage!');
+  const [showPostScanModal, setShowPostScanModal] = useState(false);
+
+  useEffect(() => {
+    const syncParticipant = () => {
+      setCampaignParticipant(getParticipantByPhone(customer.phone));
+    };
+    syncParticipant();
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('morya_clean_plate_channel');
+      bc.onmessage = () => syncParticipant();
+    } catch {
+      // fallback
+    }
+
+    window.addEventListener('morya_clean_plate_updated', syncParticipant);
+    window.addEventListener('storage', syncParticipant);
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('morya_clean_plate_updated', syncParticipant);
+      window.removeEventListener('storage', syncParticipant);
+    };
+  }, [customer.phone]);
+
+  const handleConfirmNomination = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = registerStudentNomination({
+      studentName: customer.name,
+      studentPhone: customer.phone,
+      college: nominateCollege.trim() || customer.college || 'Hostel / College',
+      pledge: nominatePledge.trim() || 'Finishing every meal with zero food waste!',
+      studentId: customer.id
+    });
+    setCampaignParticipant(res.participant);
+    setIsNominateModalOpen(false);
+    alert(res.message);
+  };
+
+  const handleStudentDailyTick = () => {
+    const res = recordStudentDailyTick(customer.phone, customer.name, today);
+    setCampaignParticipant(res.participant);
+    alert(res.message);
+    setShowPostScanModal(false);
+  };
 
   // Profile Edit State (Feature 18)
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -236,7 +305,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // UPI Payment Submission State
   const [upiConfig, setUpiConfig] = useState<MessUpiConfig>({
     upiId: 'moryamess@upi',
-    upiPayeeName: 'Morya Mess Latur',
+    upiPayeeName: 'Morya Mess Pune',
     upiQrCodeImage: ''
   });
   const [generatedUpiQrUrl, setGeneratedUpiQrUrl] = useState('');
@@ -264,6 +333,24 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   } | null>(null);
   const [manualCode, setManualCode] = useState('');
   const [scanInputMode, setScanInputMode] = useState<'camera' | 'upload' | 'manual'>('camera');
+
+  // Dynamic Anti-Fraud Live Security State (Anti-Screenshot Protection)
+  const [liveSecuritySeconds, setLiveSecuritySeconds] = useState(() => 
+    new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  );
+  const [scanTimestamp, setScanTimestamp] = useState<number | null>(null);
+  const [isTouchVerified, setIsTouchVerified] = useState(false);
+  const [syncSecurityToken, setSyncSecurityToken] = useState(() => 
+    Math.floor(((Date.now() / 15000) * 17) % 9000 + 1000).toString()
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveSecuritySeconds(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setSyncSecurityToken(Math.floor(((Date.now() / 15000) * 17) % 9000 + 1000).toString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -365,6 +452,22 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     // Listen for custom events across all features
     const handleUpdate = () => refreshAllStudentData();
 
+    // Cross-tab broadcast listener for instant notification sync
+    const channel = getNotifBroadcastChannel();
+    const handleBroadcast = (ev: MessageEvent) => {
+      if (ev.data?.type === 'STUDENT_NOTIF') {
+        fetchStudentNotifications(customer.id).then(notifs => {
+          setNotifications(notifs);
+        });
+      } else {
+        refreshAllStudentData();
+      }
+    };
+    if (channel) {
+      channel.addEventListener('message', handleBroadcast);
+    }
+
+    window.addEventListener('morya_student_notification_created', handleUpdate);
     window.addEventListener('morya_payment_updated', handleUpdate);
     window.addEventListener('morya_payment_created', handleUpdate);
     window.addEventListener('morya_leave_updated', handleUpdate);
@@ -373,6 +476,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     window.addEventListener('morya_ratings_updated', handleUpdate);
     window.addEventListener('morya_complaints_updated', handleUpdate);
     window.addEventListener('morya_reminders_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    // Periodic 5s polling for background notifications from owner
+    const pollInterval = setInterval(() => {
+      fetchStudentNotifications(customer.id).then(notifs => {
+        setNotifications(notifs);
+      });
+    }, 5000);
 
     // Feature 28: Supabase Realtime notifications subscription
     const unsubRealtime = subscribeToStudentNotificationsRealtime(customer.id, () => {
@@ -380,7 +491,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     });
 
     return () => {
+      clearInterval(pollInterval);
       unsubRealtime();
+      if (channel) {
+        channel.removeEventListener('message', handleBroadcast);
+      }
+      window.removeEventListener('morya_student_notification_created', handleUpdate);
       window.removeEventListener('morya_payment_updated', handleUpdate);
       window.removeEventListener('morya_payment_created', handleUpdate);
       window.removeEventListener('morya_leave_updated', handleUpdate);
@@ -389,13 +505,16 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       window.removeEventListener('morya_ratings_updated', handleUpdate);
       window.removeEventListener('morya_complaints_updated', handleUpdate);
       window.removeEventListener('morya_reminders_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
     };
   }, [refreshAllStudentData, customer.id]);
 
-  // Periodic Shift Ticker (Every 10 seconds)
+  // Periodic Shift & Crowd Meter Ticker (Every 10 seconds for real-time 25-min rolling turnaround)
+  const [liveCrowdTick, setLiveCrowdTick] = useState(Date.now());
   useEffect(() => {
     const interval = setInterval(() => {
       setShiftAudit(evaluateStrictMessShift());
+      setLiveCrowdTick(Date.now());
     }, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -469,6 +588,314 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     return Math.max(0, planFee - totalVerifiedPaid);
   }, [customer.totalAmount, standardFee, totalVerifiedPaid]);
 
+  const combinedNotifications = useMemo(() => {
+    const list = [...notifications];
+
+    // 1. Subscription Expiring soon (Virtual Notification)
+    if (!isExpired && isExpiringSoon) {
+      if (!list.some(n => n.id === 'local_sub_expiring')) {
+        list.unshift({
+          id: 'local_sub_expiring',
+          title: daysRemaining === 0 ? 'Subscription Expires Today!' : 'Subscription Expiring Soon!',
+          message: `Your meal plan is valid till ${customer.endDate}. Only ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left. Renew early to avoid gate scanner interruption.`,
+          type: 'subscription_expiry',
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+      }
+    }
+
+    // 2. Validity Extended by leaves
+    const approvedLeaves = (customer.leaves || []).filter(l => l.approved || l.status === 'approved');
+    const totalApprovedLeaveDays = approvedLeaves.reduce((acc, l) => acc + (l.days || 0), 0);
+    if (!isExpired && !isExpiringSoon && totalApprovedLeaveDays > 0) {
+      if (!list.some(n => n.id === 'local_leave_extended')) {
+        list.unshift({
+          id: 'local_leave_extended',
+          title: `Validity Extended by ${totalApprovedLeaveDays} Day(s)`,
+          message: `Your approved leave was credited. Pass valid until ${customer.endDate} (${daysRemaining} days remaining).`,
+          type: 'leave_extended',
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+      }
+    }
+
+    // 3. Pending leave request
+    const pendingLeave = leaveRequests.find(l => l.status === 'pending' || (!l.approved && l.status !== 'rejected'));
+    if (pendingLeave) {
+      if (!list.some(n => n.id === `local_leave_pending_${pendingLeave.id}`)) {
+        list.unshift({
+          id: `local_leave_pending_${pendingLeave.id}`,
+          title: 'Leave Request Pending',
+          message: `Application for ${pendingLeave.startDate} to ${pendingLeave.endDate} (${pendingLeave.days} days) is under Owner review.`,
+          type: 'leave_pending',
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+      }
+    }
+
+    // 4. Recent payment verified
+    const latestVerifiedPayment = payments.find(p => p.status === 'verified');
+    const isRecentVerified = latestVerifiedPayment && (
+      (Date.now() - new Date(latestVerifiedPayment.date || latestVerifiedPayment.createdAt || 0).getTime()) < 5 * 24 * 60 * 60 * 1000
+    );
+    if (isRecentVerified && latestVerifiedPayment) {
+      if (!list.some(n => n.id === `local_pay_verified_${latestVerifiedPayment.id}`)) {
+        list.unshift({
+          id: `local_pay_verified_${latestVerifiedPayment.id}`,
+          title: 'Recent Payment Verified',
+          message: `Payment of ₹${latestVerifiedPayment.amount} on ${latestVerifiedPayment.date} has been verified and credited by Mess Owner.`,
+          type: 'payment_verified',
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+      }
+    }
+
+    return list;
+  }, [notifications, isExpired, isExpiringSoon, daysRemaining, customer.endDate, customer.leaves, leaveRequests, payments]);
+
+  // =========================================================================
+  // DYNAMIC MEAL TIME WINDOW & LIVE 20-SEAT 25-MIN ROLLING CROWD METER
+  // =========================================================================
+  const liveCrowdMeter = useMemo(() => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const totalMinutes = currentHour * 60 + currentMinute;
+
+    // Shift intervals in minutes
+    // Lunch: 10:30 AM to 2:30 PM (630 to 870 mins)
+    const lunchStart = 10 * 60 + 30;
+    const lunchEnd = 14 * 60 + 30;
+    // Dinner: 7:30 PM to 9:45 PM (1170 to 1305 mins)
+    const dinnerStart = 19 * 60 + 30;
+    const dinnerEnd = 21 * 60 + 45;
+
+    let activeShift: 'lunch' | 'dinner' | null = null;
+    if (totalMinutes >= lunchStart && totalMinutes <= lunchEnd) {
+      activeShift = 'lunch';
+    } else if (totalMinutes >= dinnerStart && totalMinutes <= dinnerEnd) {
+      activeShift = 'dinner';
+    }
+
+    const TOTAL_SEATS = 20;
+
+    if (!activeShift) {
+      return {
+        statusTitle: '⚪ MESS OFFLINE — Shift Closed',
+        detail: 'Dining Hall is currently closed. Shift hours: Lunch (10:30 AM - 2:30 PM), Dinner (7:30 PM - 9:45 PM).',
+        occupancy: 0,
+        activeShift: null,
+        totalSeats: TOTAL_SEATS,
+        occupiedSeats: 0,
+        availableSeats: TOTAL_SEATS,
+        colorScheme: 'slate' as 'emerald' | 'amber' | 'rose' | 'slate',
+        estimatedWaitTime: '0 min'
+      };
+    }
+
+    // Filter real scanned students from attendance records in the last 25 minutes of active shift today
+    // Every student scan holds 1 seat for 25 minutes, then automatically frees up.
+    const twentyFiveMinutesAgo = Date.now() - 25 * 60 * 1000;
+    const activeDinersList = attendanceRecords.filter(log => {
+      const logTime = new Date(log.timestamp).getTime();
+      const isToday = log.date === today;
+      const isCurrentMeal = log.mealType === activeShift || (log.scanStatus === 'ALLOW' || (log.scanStatus as string) === 'VERIFIED');
+      return isToday && isCurrentMeal && logTime >= twentyFiveMinutesAgo;
+    });
+
+    const occupiedSeats = Math.min(TOTAL_SEATS, activeDinersList.length);
+    const availableSeats = Math.max(0, TOTAL_SEATS - occupiedSeats);
+    const occupancyPercent = Math.round((occupiedSeats / TOTAL_SEATS) * 100);
+
+    let statusTitle = '';
+    let detail = '';
+    let colorScheme: 'emerald' | 'amber' | 'rose' | 'slate' = 'emerald';
+    let estimatedWaitTime = '0 min (Instant Seating)';
+
+    if (occupiedSeats <= 5) {
+      statusTitle = '🟢 PLENTY OF SEATS AVAILABLE';
+      detail = `${availableSeats} of ${TOTAL_SEATS} seats open. Zero waiting time — best time to dine right now!`;
+      colorScheme = 'emerald';
+      estimatedWaitTime = '0 min (Instant)';
+    } else if (occupiedSeats <= 13) {
+      statusTitle = '🟡 MODERATE RUSH — SEATS FREE';
+      detail = `${availableSeats} seats free (${occupiedSeats} dining). Quick turnaround with comfortable seating.`;
+      colorScheme = 'amber';
+      estimatedWaitTime = '1-2 mins';
+    } else if (occupiedSeats <= 18) {
+      statusTitle = '🟠 PEAK DINING RUSH';
+      detail = `High occupancy: only ${availableSeats} seats left. Fast individual 25-min turnover in progress.`;
+      colorScheme = 'amber';
+      estimatedWaitTime = '3-5 mins';
+    } else {
+      statusTitle = '🔴 HALL FULL — 5-10 MIN WAIT';
+      detail = `All ${TOTAL_SEATS} seats occupied. New seats will automatically free up as diners finish their 25-min meals.`;
+      colorScheme = 'rose';
+      estimatedWaitTime = '5-10 mins';
+    }
+
+    return {
+      statusTitle,
+      detail,
+      occupancy: occupancyPercent,
+      activeShift,
+      totalSeats: TOTAL_SEATS,
+      occupiedSeats,
+      availableSeats,
+      colorScheme,
+      estimatedWaitTime
+    };
+  }, [attendanceRecords, today, liveCrowdTick]);
+
+  // =========================================================================
+  // DYNAMIC FITNESS NUTRITION MACROS BASED ON ACTUAL ACTIVE WEEKLY MENU (EXACT 1 PLATE)
+  // =========================================================================
+  const fitnessNutritionMacros = useMemo(() => {
+    // Find the active meal type
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const totalMinutes = currentHour * 60 + currentMinute;
+    const lunchStart = 10 * 60 + 30;
+    const lunchEnd = 14 * 60 + 30;
+    const dinnerStart = 19 * 60 + 30;
+    const dinnerEnd = 21 * 60 + 45;
+
+    let targetMeal: 'lunch' | 'dinner' = 'lunch';
+    if (totalMinutes >= dinnerStart && totalMinutes <= dinnerEnd) {
+      targetMeal = 'dinner';
+    } else if (totalMinutes >= lunchStart && totalMinutes <= lunchEnd) {
+      targetMeal = 'lunch';
+    }
+
+    // Gender-aware portion: Boys eat 4 rotis, Girls eat 3 rotis
+    const isFemale = customer.gender === 'female';
+    const rotiCount = isFemale ? 3 : 4;
+
+    // Component 1: Fresh Wheat Rotis (per chapati: ~70 kcal, ~2.4g protein, ~13.5g carbs, ~0.7g fats)
+    const rotiKcal = rotiCount * 70;
+    const rotiProtein = +(rotiCount * 2.4).toFixed(1);
+    const rotiCarbs = +(rotiCount * 13.5).toFixed(1);
+    const rotiFats = +(rotiCount * 0.7).toFixed(1);
+
+    // Component 2: Warm Dal Katori (140ml cooked toor/moong dal with cumin-mustard tadka)
+    const dalKcal = 95;
+    const dalProtein = 4.2;
+    const dalCarbs = 13.5;
+    const dalFats = 2.8;
+
+    // Component 3: Steamed Rice Katori (110g cooked Kolam rice)
+    const riceKcal = targetMeal === 'dinner' ? 100 : 118;
+    const riceProtein = targetMeal === 'dinner' ? 2.0 : 2.4;
+    const riceCarbs = targetMeal === 'dinner' ? 22.0 : 26.0;
+    const riceFats = 0.4;
+
+    // Component 4: Fresh Salad (Cucumber, Tomato, Onion slice)
+    const saladKcal = 12;
+    const saladProtein = 0.5;
+    const saladCarbs = 2.0;
+    const saladFats = 0.1;
+
+    // Get specific specials from saved weeklyMenu or DEFAULT_WEEKLY_MENU
+    const activeDayMenu = weeklyMenu[menuActiveDay] || DEFAULT_WEEKLY_MENU[menuActiveDay];
+    const specialDish = targetMeal === 'lunch' 
+      ? activeDayMenu?.lunchSpecial || ''
+      : activeDayMenu?.dinnerSpecial || '';
+
+    const sweetDish = targetMeal === 'lunch'
+      ? activeDayMenu?.lunchSweet || ''
+      : activeDayMenu?.dinnerSweet || '';
+
+    // Component 5: Daily Sabzi / Curry (1 katori ~120g portion)
+    let sabziKcal = 85;
+    let sabziProtein = 2.0;
+    let sabziCarbs = 8.5;
+    let sabziFats = 4.5;
+
+    const dishLower = specialDish.toLowerCase();
+    
+    if (dishLower.includes('paneer') || dishLower.includes('bhurji')) {
+      // High protein rich paneer curry (~35-40g paneer in gravy)
+      sabziKcal = 140;
+      sabziProtein = 7.0;
+      sabziCarbs = 6.0;
+      sabziFats = 9.5;
+    } else if (dishLower.includes('chole') || dishLower.includes('rajma') || dishLower.includes('chana') || dishLower.includes('soyabean') || dishLower.includes('soya')) {
+      // Legume protein curry
+      sabziKcal = 115;
+      sabziProtein = 5.5;
+      sabziCarbs = 14.5;
+      sabziFats = 3.5;
+    } else if (dishLower.includes('pithla') || dishLower.includes('besan')) {
+      // Gram flour besan pithla
+      sabziKcal = 100;
+      sabziProtein = 4.5;
+      sabziCarbs = 10.5;
+      sabziFats = 4.0;
+    } else if (dishLower.includes('shev') || dishLower.includes('usal') || dishLower.includes('matki') || dishLower.includes('sprouts')) {
+      // Sprouted legumes or shev bhaji
+      sabziKcal = 110;
+      sabziProtein = 4.0;
+      sabziCarbs = 11.0;
+      sabziFats = 5.2;
+    } else if (dishLower.includes('kaju') || dishLower.includes('korma')) {
+      // Rich cashew curry
+      sabziKcal = 160;
+      sabziProtein = 3.5;
+      sabziCarbs = 9.0;
+      sabziFats = 12.0;
+    } else if (dishLower.includes('baingan') || dishLower.includes('bhendi') || dishLower.includes('aloo') || dishLower.includes('jeera') || dishLower.includes('gobi') || dishLower.includes('veg') || dishLower.includes('shevga') || dishLower.includes('drumstick')) {
+      // Typical light vegetable curry / potato dish
+      sabziKcal = 85;
+      sabziProtein = 2.0;
+      sabziCarbs = 8.5;
+      sabziFats = 4.5;
+    } else if (dishLower.includes('closed') || dishLower.includes('off')) {
+      // Mess closed
+      return { kcal: 0, protein: 0, carbs: 0, fats: 0, dishName: 'Mess Closed', targetMeal, rotiCount };
+    } else {
+      // Default general veg curry
+      sabziKcal = 85;
+      sabziProtein = 2.2;
+      sabziCarbs = 9.0;
+      sabziFats = 4.5;
+    }
+
+    // Component 6: Sweet dish if any (1 small Gulab Jamun / small scoop)
+    let sweetKcal = 0;
+    let sweetProtein = 0;
+    let sweetCarbs = 0;
+    let sweetFats = 0;
+    const sweetLower = sweetDish.toLowerCase();
+    if (sweetLower && !sweetLower.includes('n/a') && !sweetLower.includes('no')) {
+      if (sweetLower.includes('jamun') || sweetLower.includes('sheera') || sweetLower.includes('halwa') || sweetLower.includes('kheer')) {
+        sweetKcal = 110;
+        sweetProtein = 1.2;
+        sweetCarbs = 20.0;
+        sweetFats = 3.0;
+      }
+    }
+
+    const totalKcal = Math.round(rotiKcal + dalKcal + riceKcal + saladKcal + sabziKcal + sweetKcal);
+    const totalProtein = Math.round((rotiProtein + dalProtein + riceProtein + saladProtein + sabziProtein + sweetProtein) * 10) / 10;
+    const totalCarbs = Math.round(rotiCarbs + dalCarbs + riceCarbs + saladCarbs + sabziCarbs + sweetCarbs);
+    const totalFats = Math.round((rotiFats + dalFats + riceFats + saladFats + sabziFats + sweetFats) * 10) / 10;
+
+    return {
+      kcal: totalKcal,
+      protein: totalProtein,
+      carbs: totalCarbs,
+      fats: totalFats,
+      dishName: specialDish || 'Daily Vegetable Curry',
+      targetMeal,
+      rotiCount
+    };
+  }, [weeklyMenu, menuActiveDay, customer.gender]);
+
   // =========================================================================
   // SUBMIT PAYMENT HANDLER (FEATURE 7)
   // =========================================================================
@@ -515,6 +942,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // =========================================================================
   const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isExpired) {
+      setLeaveErrorMessage(`Cannot apply for leave: Mess subscription expired on ${customer.endDate || 'N/A'}. Please renew your pass with the mess owner first.`);
+      return;
+    }
     if (!leaveStart || !leaveEnd) {
       setLeaveErrorMessage('Please select both start and end dates.');
       return;
@@ -709,6 +1140,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     setIsVerifying(false);
 
     if (res.success) {
+      setScanTimestamp(Date.now());
       setScanResult({
         success: true,
         message: res.message || 'Attendance Approved!',
@@ -716,7 +1148,29 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         time: res.time,
         date: res.date
       });
-      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      // Celebration Confetti (Morya flying colorful paper effect)
+      confetti({
+        particleCount: 65,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#f97316', '#10b981', '#2563eb', '#f59e0b', '#ec4899', '#8b5cf6']
+      });
+      setTimeout(() => {
+        confetti({
+          particleCount: 40,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.65 },
+          colors: ['#f97316', '#10b981', '#f59e0b']
+        });
+        confetti({
+          particleCount: 40,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.65 },
+          colors: ['#f97316', '#10b981', '#f59e0b']
+        });
+      }, 200);
       await refreshAllStudentData();
       if (onMealLogged) {
         onMealLogged({
@@ -813,9 +1267,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             title="Notifications"
           >
             <Bell className="w-5 h-5" />
-            {notifications.filter(n => !n.is_read).length > 0 && (
+            {combinedNotifications.filter(n => !n.is_read).length > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-600 text-white font-black text-[10px] flex items-center justify-center border-2 border-white animate-pulse">
-                {notifications.filter(n => !n.is_read).length > 9 ? '9+' : notifications.filter(n => !n.is_read).length}
+                {combinedNotifications.filter(n => !n.is_read).length > 9 ? '9+' : combinedNotifications.filter(n => !n.is_read).length}
               </span>
             )}
           </button>
@@ -1010,11 +1464,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     <Bell className="w-4 h-4" />
                     <span>Notifications</span>
                   </div>
-                  {notifications.filter(n => !n.is_read).length > 0 && (
+                  {combinedNotifications.filter(n => !n.is_read).length > 0 && (
                     <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
                       activeTab === 'notifications' ? 'bg-white text-orange-700' : 'bg-rose-100 text-rose-800'
                     }`}>
-                      {notifications.filter(n => !n.is_read).length}
+                      {combinedNotifications.filter(n => !n.is_read).length}
                     </span>
                   )}
                 </button>
@@ -1305,6 +1759,380 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             onNavigateTab={(tab) => setActiveTab(tab as StudentTab)}
           />
 
+          {/* 0. LIVE SHIFT STATUS & 15-MIN LAST CALL AUTO BUZZER */}
+          <ShiftLastCallBuzzerBanner />
+
+          {/* 1. LIVE MESS OCCUPANCY & 20-SEAT CROWD METER (25-MIN ROLLING AUTO-UPDATE) */}
+          <div className={`p-4 sm:p-6 rounded-3xl border-2 shadow-sm transition-all space-y-4 ${
+            liveCrowdMeter.colorScheme === 'emerald'
+              ? 'bg-gradient-to-br from-emerald-50 via-teal-50/40 to-white border-emerald-300/80 shadow-emerald-500/5'
+              : liveCrowdMeter.colorScheme === 'amber'
+              ? 'bg-gradient-to-br from-amber-50 via-orange-50/40 to-white border-amber-300/80 shadow-amber-500/5'
+              : liveCrowdMeter.colorScheme === 'rose'
+              ? 'bg-gradient-to-br from-rose-50 via-orange-50/40 to-white border-rose-300/80 shadow-rose-500/5'
+              : 'bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-stone-50 border-amber-300/80 shadow-amber-500/5'
+          }`}>
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/70">
+              <div className="flex items-center gap-3">
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-md shrink-0 ${
+                  liveCrowdMeter.colorScheme === 'emerald'
+                    ? 'bg-gradient-to-tr from-emerald-500 to-teal-500 text-white shadow-emerald-500/25'
+                    : liveCrowdMeter.colorScheme === 'amber'
+                    ? 'bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-orange-500/25'
+                    : liveCrowdMeter.colorScheme === 'rose'
+                    ? 'bg-gradient-to-tr from-rose-500 to-red-600 text-white shadow-rose-500/25'
+                    : 'bg-gradient-to-tr from-amber-800 via-orange-700 to-amber-600 text-white shadow-orange-900/20'
+                }`}>
+                  {liveCrowdMeter.colorScheme === 'emerald' ? '🟢' : liveCrowdMeter.colorScheme === 'rose' ? '🔴' : liveCrowdMeter.colorScheme === 'amber' ? '🟡' : '🍽️'}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                      Live 20-Seat Dining Hall Meter
+                    </h3>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white shadow-xs ${
+                      liveCrowdMeter.colorScheme === 'emerald' ? 'bg-emerald-600' :
+                      liveCrowdMeter.colorScheme === 'amber' ? 'bg-amber-600' :
+                      liveCrowdMeter.colorScheme === 'rose' ? 'bg-rose-600' : 'bg-gradient-to-r from-amber-800 to-orange-700'
+                    }`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping inline-block" />
+                      {liveCrowdMeter.activeShift ? `${liveCrowdMeter.activeShift} Shift` : 'Offline'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium mt-0.5">
+                    {liveCrowdMeter.detail}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-white/90 border border-slate-200 text-[11px] font-bold text-slate-600 shadow-2xs font-mono">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>25-Min Auto Refresh</span>
+                </span>
+              </div>
+            </div>
+
+            {/* 3 Metric Cards Grid */}
+            <div className="grid grid-cols-3 gap-2.5">
+              {/* Free Seats */}
+              <div className="p-3 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs text-center space-y-0.5">
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide block">Seats Free</span>
+                <div className="text-xl sm:text-2xl font-black font-mono text-emerald-600 leading-none">
+                  {liveCrowdMeter.availableSeats}
+                </div>
+                <span className="text-[10px] font-semibold text-emerald-800/80 block">🟢 Walk-in Ready</span>
+              </div>
+
+              {/* Occupied */}
+              <div className="p-3 rounded-2xl bg-white border border-amber-200/90 shadow-2xs text-center space-y-0.5">
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wide block">Occupied</span>
+                <div className="text-xl sm:text-2xl font-black font-mono text-amber-800 leading-none">
+                  {liveCrowdMeter.occupiedSeats} <span className="text-xs font-normal text-slate-400 font-sans">/ 20</span>
+                </div>
+                <span className="text-[10px] font-semibold text-amber-800/80 block">🪑 In Dining</span>
+              </div>
+
+              {/* Wait Time */}
+              <div className="p-3 rounded-2xl bg-white border border-sky-200/90 shadow-2xs text-center space-y-0.5">
+                <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wide block">Est. Wait</span>
+                <div className="text-base sm:text-lg font-black font-mono text-sky-800 leading-none truncate mt-0.5">
+                  {liveCrowdMeter.estimatedWaitTime.split(' ')[0]} {liveCrowdMeter.estimatedWaitTime.split(' ')[1] || 'min'}
+                </div>
+                <span className="text-[10px] font-semibold text-sky-800/80 block">⏱️ No Delay</span>
+              </div>
+            </div>
+
+            {/* Live Occupancy Gauge Bar */}
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-700 flex items-center gap-1.5">
+                  <span>⚡ Dining Hall Capacity:</span>
+                  <span className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-black ${
+                    liveCrowdMeter.occupancy <= 40 ? 'bg-emerald-100 text-emerald-800' :
+                    liveCrowdMeter.occupancy <= 75 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {liveCrowdMeter.occupancy}% Busy
+                  </span>
+                </span>
+                <span className="text-slate-500 font-mono text-[11px]">
+                  {liveCrowdMeter.availableSeats > 0 ? `${liveCrowdMeter.availableSeats} chairs waiting for you` : 'All seats in use'}
+                </span>
+              </div>
+
+              {/* Visual Multi-step Bar */}
+              <div className="h-3 rounded-full bg-slate-100 overflow-hidden border border-slate-200/80 p-0.5 flex">
+                <div 
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    liveCrowdMeter.occupancy <= 35
+                      ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+                      : liveCrowdMeter.occupancy <= 75
+                      ? 'bg-gradient-to-r from-emerald-400 via-amber-400 to-orange-500'
+                      : 'bg-gradient-to-r from-amber-400 via-orange-500 to-rose-600'
+                  }`}
+                  style={{ width: `${Math.max(5, liveCrowdMeter.occupancy)}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400 pt-0.5">
+                <span className="text-emerald-700">🟢 0% Smooth</span>
+                <span className="text-amber-700">🟡 50% Steady</span>
+                <span className="text-rose-700">🔴 100% Full</span>
+              </div>
+            </div>
+
+            {/* 20-Seat Visual Grid (Chairs Floor Plan) */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
+                  <span>🪑 Hall Layout (20 Dining Chairs)</span>
+                  <span className="text-[10px] font-bold text-slate-400 font-mono">• 25-Min Rolling Cycle</span>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] font-bold">
+                  <span className="inline-flex items-center gap-1 text-emerald-800">
+                    <span className="w-2.5 h-2.5 rounded-md bg-emerald-100 border border-emerald-400 inline-block" /> Free ({liveCrowdMeter.availableSeats})
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-amber-800">
+                    <span className="w-2.5 h-2.5 rounded-md bg-amber-500 inline-block" /> Dining ({liveCrowdMeter.occupiedSeats})
+                  </span>
+                </div>
+              </div>
+
+              {/* 20 Chair Cards Grid */}
+              <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 sm:gap-2">
+                {Array.from({ length: 20 }).map((_, index) => {
+                  const isOccupied = index < liveCrowdMeter.occupiedSeats;
+                  return (
+                    <div
+                      key={index}
+                      title={isOccupied ? `Seat ${index + 1}: Occupied (In dining session)` : `Seat ${index + 1}: Available (Ready to sit)`}
+                      className={`rounded-xl p-1 sm:p-1.5 flex flex-col items-center justify-center transition-all cursor-default select-none ${
+                        isOccupied
+                          ? 'bg-gradient-to-b from-amber-500 to-orange-500 text-white border-2 border-orange-600 shadow-xs'
+                          : 'bg-gradient-to-b from-white to-emerald-50/80 border-2 border-emerald-300 text-emerald-800 shadow-2xs hover:border-emerald-500'
+                      }`}
+                    >
+                      <span className="text-xs sm:text-sm leading-none">{isOccupied ? '🍲' : '🪑'}</span>
+                      <span className={`text-[10px] font-mono font-black mt-0.5 leading-none ${isOccupied ? 'text-white' : 'text-slate-800'}`}>
+                        {index + 1 < 10 ? `0${index + 1}` : index + 1}
+                      </span>
+                      <span className={`text-[8px] font-bold uppercase tracking-tight leading-none mt-0.5 ${
+                        isOccupied ? 'text-amber-100' : 'text-emerald-700'
+                      }`}>
+                        {isOccupied ? 'Busy' : 'Open'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Pro-Tip Note */}
+              <div className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs font-medium ${
+                liveCrowdMeter.colorScheme === 'emerald'
+                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                  : liveCrowdMeter.colorScheme === 'amber'
+                  ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+                  : 'bg-rose-50/70 border-rose-200 text-rose-900'
+              }`}>
+                <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
+                <span className="text-[11px] leading-snug">
+                  {liveCrowdMeter.colorScheme === 'emerald'
+                    ? '✨ Perfect timing! Dining hall has zero rush. Fresh rotis straight off the tawa with immediate seating.'
+                    : liveCrowdMeter.colorScheme === 'amber'
+                    ? '⏱️ Steady flow. Each student dines for ~25 minutes, meaning seats free up every 2 minutes.'
+                    : '🔥 Peak rush window. Grab a seat quickly or visit in 10-15 mins when the batch clears.'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. DAILY FITNESS & CALORIE MACRO BREAKDOWN (EXACT 1-PLATE THALI PORTION) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-amber-50/90 via-orange-50/60 to-emerald-50/80 text-slate-800 shadow-sm space-y-3 border-2 border-amber-200/90">
+            <div className="flex items-center justify-between border-b border-amber-200/60 pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+                  <Utensils className="w-4 h-4 text-amber-800" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-normal">
+                      1-Plate Thali Nutrition ({fitnessNutritionMacros.targetMeal === 'dinner' ? 'Dinner' : 'Lunch'})
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-bold">
+                      Exact 1 Plate
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 font-medium">
+                    Standard meal portion: <strong className="text-amber-950">{fitnessNutritionMacros.dishName}</strong>, {fitnessNutritionMacros.rotiCount} Rotis, Dal & Rice
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-orange-600 text-white text-xs font-bold shadow-xs">
+                {fitnessNutritionMacros.kcal > 0 ? `${fitnessNutritionMacros.kcal} kcal` : 'Closed'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 text-center">
+              <div className="p-2.5 sm:p-3 rounded-2xl bg-white border border-amber-200/90 shadow-2xs space-y-0.5">
+                <span className="text-[11px] font-semibold text-slate-600 block">Protein</span>
+                <div className="text-base sm:text-lg font-bold text-orange-600">
+                  {fitnessNutritionMacros.protein} g
+                </div>
+                <span className="text-[10px] text-slate-500 block">1 Plate Serving</span>
+              </div>
+              <div className="p-2.5 sm:p-3 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs space-y-0.5">
+                <span className="text-[11px] font-semibold text-slate-600 block">Carbs</span>
+                <div className="text-base sm:text-lg font-bold text-emerald-700">
+                  {fitnessNutritionMacros.carbs} g
+                </div>
+                <span className="text-[10px] text-slate-500 block">Rotis & Rice</span>
+              </div>
+              <div className="p-2.5 sm:p-3 rounded-2xl bg-white border border-sky-200/90 shadow-2xs space-y-0.5">
+                <span className="text-[11px] font-semibold text-slate-600 block">Healthy Fats</span>
+                <div className="text-base sm:text-lg font-bold text-sky-700">
+                  {fitnessNutritionMacros.fats} g
+                </div>
+                <span className="text-[10px] text-slate-500 block">Tadka & Gravy</span>
+              </div>
+            </div>
+
+            {/* 1-Plate Component Breakdown Pill (Clean, Official, No Emojis) */}
+            <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200/80 text-xs text-slate-700 flex items-center justify-between flex-wrap gap-2 font-medium">
+              <span>{fitnessNutritionMacros.rotiCount} Rotis ({fitnessNutritionMacros.rotiCount === 4 ? '9.6g' : '7.2g'} protein)</span>
+              <span className="text-slate-300">•</span>
+              <span>Dal (4.2g protein)</span>
+              <span className="text-slate-300">•</span>
+              <span>Rice (2.4g protein)</span>
+              <span className="text-slate-300">•</span>
+              <span>Sabzi (2–7g protein)</span>
+            </div>
+          </div>
+
+          {/* 2.5. AUTO-PILOT STUDENT MEAL SKIP & FOOD SAVER */}
+          <AutoMealSkipCard 
+            studentId={customer.id} 
+            studentName={customer.name} 
+          />
+
+          {/* 3. 25-DAY CLEAN PLATE TASK CAMPAIGN CARD */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-800 text-white shadow-md space-y-3.5 border-2 border-emerald-400/40">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🌿</span>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-emerald-100">
+                    25-Day Clean Plate Campaign
+                  </h4>
+                  <p className="text-[10px] text-emerald-200">Zero Food Waste Monthly Challenge</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-extrabold text-amber-200 bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-400/40">
+                🏆 5 Winners ₹50 OFF
+              </span>
+            </div>
+
+            {campaignParticipant ? (
+              <>
+                {/* Winner Banner if selected */}
+                {campaignParticipant.isWinner && (
+                  <div className="p-3 rounded-2xl bg-amber-400 text-emerald-950 font-black text-xs flex items-center justify-between shadow-md animate-bounce">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-emerald-900" />
+                      <span>🎉 CONGRATULATIONS! You won ₹50 Renewal Discount!</span>
+                    </div>
+                    <span className="bg-emerald-950 text-amber-300 text-[10px] px-2 py-0.5 rounded-full">
+                      Auto-Applied
+                    </span>
+                  </div>
+                )}
+
+                {/* Nomination details badge */}
+                <div className="flex items-center justify-between text-[11px] text-emerald-100 bg-emerald-950/30 px-3 py-1.5 rounded-xl border border-emerald-400/20">
+                  <span>Enrolled: <strong>{campaignParticipant.registeredAt}</strong></span>
+                  <span className="text-amber-300 font-bold">
+                    {campaignParticipant.completedDates.length >= 25 ? '✅ Qualified for Draw' : `${25 - campaignParticipant.completedDates.length} Days Left`}
+                  </span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-400/30 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-extrabold text-white">Your 25-Day Streak Progress</span>
+                    <strong className="font-mono text-amber-300 font-black">
+                      {campaignParticipant.completedDates.length} / 25 Days Ticked
+                    </strong>
+                  </div>
+
+                  <div className="w-full bg-emerald-950/60 h-2.5 rounded-full overflow-hidden p-0.5 border border-emerald-400/30">
+                    <div 
+                      className="bg-gradient-to-r from-amber-400 to-emerald-400 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (campaignParticipant.completedDates.length / 25) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 25 Badges Grid (Days 1 to 25) */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold text-emerald-200 uppercase tracking-wider block">
+                    Daily Task Calendar Grid (Days 1–25):
+                  </span>
+                  <div className="grid grid-cols-5 gap-1.5 text-center font-mono text-[10px]">
+                    {Array.from({ length: 25 }, (_, i) => {
+                      const dayNum = i + 1;
+                      const isTicked = i < campaignParticipant.completedDates.length;
+                      return (
+                        <div
+                          key={dayNum}
+                          className={`py-1.5 px-1 rounded-xl font-bold transition ${
+                            isTicked
+                              ? 'bg-amber-400 text-emerald-950 font-black shadow-xs border border-amber-300'
+                              : 'bg-emerald-900/40 text-emerald-200/60 border border-emerald-500/20'
+                          }`}
+                        >
+                          {isTicked ? `✓ D${dayNum}` : `D${dayNum}`}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Daily Tick Action Button */}
+                <div className="pt-1 flex items-center justify-between gap-2">
+                  {campaignParticipant.completedDates.includes(today) ? (
+                    <div className="w-full py-2.5 px-3 rounded-xl bg-amber-400 text-emerald-950 text-xs font-black flex items-center justify-center gap-1.5 shadow-sm">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-900" />
+                      <span>Today's Clean Plate Ticked! ({campaignParticipant.completedDates.length}/25 Days)</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleStudentDailyTick}
+                      className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-emerald-50 text-emerald-950 font-black text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span>Tick Today's Clean Plate (+1 Day Streak) ➔</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* If not nominated yet: Prompt to Nominate */
+              <div className="space-y-3">
+                <p className="text-xs text-emerald-100">
+                  Finish your meal completely for 25+ days without food waste. Nominate below to enter the monthly challenge and compete for ₹50 subscription discount!
+                </p>
+
+                <button
+                  onClick={() => setIsNominateModalOpen(true)}
+                  className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-950 font-black text-xs transition cursor-pointer shadow-lg flex items-center justify-center gap-2"
+                >
+                  <Trophy className="w-4 h-4 text-amber-500" />
+                  <span>Nominate Me for 25-Day Challenge (Join Now) ➔</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Member Profile Overview Card */}
           <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -1548,27 +2376,29 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           )}
 
           {/* Quick Meal Rating Banner (Feature 12 Dashboard Shortcut) */}
-          <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Star className="w-5 h-5 fill-white" />
+          {!isExpired && (
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Star className="w-5 h-5 fill-white" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                    Rate Today's {shiftAudit.mealType.toUpperCase()}
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    How was the food today? Share quick feedback with the chef
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">
-                  Rate Today's {shiftAudit.mealType.toUpperCase()}
-                </h4>
-                <p className="text-[11px] text-slate-500">
-                  How was the food today? Share quick feedback with the chef
-                </p>
-              </div>
+              <button
+                onClick={() => setActiveTab('ratings')}
+                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+              >
+                Rate Meal
+              </button>
             </div>
-            <button
-              onClick={() => setActiveTab('ratings')}
-              className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
-            >
-              Rate Meal
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -1888,72 +2718,93 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             )}
 
-            <form onSubmit={handleLeaveSubmit} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Leave Start Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    min={today}
-                    value={leaveStart}
-                    onChange={e => setLeaveStart(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
-                  />
+            {isExpired ? (
+              <div className="p-5 sm:p-6 rounded-2xl bg-rose-50 border-2 border-rose-300 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
+                  <AlertCircle className="w-6 h-6" />
                 </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Leave End Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    min={leaveStart}
-                    value={leaveEnd}
-                    onChange={e => setLeaveEnd(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
-                  />
+                <div className="space-y-1">
+                  <h4 className="font-black text-rose-950 text-sm sm:text-base">
+                    Subscription Expired — Leave Applications Blocked
+                  </h4>
+                  <p className="text-xs text-rose-800 leading-relaxed max-w-md mx-auto">
+                    Your pass ended on <strong>{customer.endDate || 'N/A'}</strong>. Vacation leave requests, diet skips, and validity extension benefits can strictly only be used while your mess subscription is actively running.
+                  </p>
+                </div>
+                <div className="pt-1">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-200/80 text-rose-900 text-[11px] font-black">
+                    🔒 Please renew your mess pass with owner to apply for leaves
+                  </span>
                 </div>
               </div>
+            ) : (
+              <form onSubmit={handleLeaveSubmit} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">
+                      Leave Start Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      min={today}
+                      value={leaveStart}
+                      onChange={e => setLeaveStart(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">
+                      Leave End Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      min={leaveStart}
+                      value={leaveEnd}
+                      onChange={e => setLeaveEnd(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Reason for Leave *
-                </label>
-                <select
-                  value={leaveReason}
-                  onChange={e => setLeaveReason(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    Reason for Leave *
+                  </label>
+                  <select
+                    value={leaveReason}
+                    onChange={e => setLeaveReason(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                  >
+                    <option value="Going to Hometown / Family Function">Going to Hometown / Family Function</option>
+                    <option value="College Semester Exam Break">College Semester Exam Break</option>
+                    <option value="Medical / Health Leave">Medical / Health Leave</option>
+                    <option value="Industrial Training / Internship">Industrial Training / Internship</option>
+                    <option value="Other Personal Reason">Other Personal Reason</option>
+                  </select>
+                </div>
+
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
+                  💡 <strong>Mess Leave Policy:</strong> Please submit leave requests at least 1 day in advance. Once approved by the mess owner, your validity end date is automatically extended.
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingLeave}
+                  className="w-full py-3 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-50"
                 >
-                  <option value="Going to Hometown / Family Function">Going to Hometown / Family Function</option>
-                  <option value="College Semester Exam Break">College Semester Exam Break</option>
-                  <option value="Medical / Health Leave">Medical / Health Leave</option>
-                  <option value="Industrial Training / Internship">Industrial Training / Internship</option>
-                  <option value="Other Personal Reason">Other Personal Reason</option>
-                </select>
-              </div>
-
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
-                💡 <strong>Mess Leave Policy:</strong> Please submit leave requests at least 1 day in advance. Once approved by the mess owner, your validity end date is automatically extended.
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmittingLeave}
-                className="w-full py-3 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-50"
-              >
-                {isSubmittingLeave ? (
-                  <span>Submitting to Database...</span>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>Submit Leave Request to Mess Manager</span>
-                  </>
-                )}
-              </button>
-            </form>
+                  {isSubmittingLeave ? (
+                    <span>Submitting to Database...</span>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Submit Leave Request to Mess Manager</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
 
             {/* Live Leave History */}
             <div className="pt-4 border-t border-slate-100 space-y-3">
@@ -2254,7 +3105,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 Official Digital Receipt
               </span>
               <h3 className="text-lg font-black text-slate-900 uppercase mt-0.5">{messName}</h3>
-              <p className="text-[10px] text-slate-500">Boys & Girls Dining Hall, College Road, Latur</p>
+              <p className="text-[10px] text-slate-500">Boys & Girls Dining Hall, FC Road, Pune</p>
             </div>
 
             {/* Receipt Meta */}
@@ -2709,7 +3560,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         type="text"
                         value={editCollege}
                         onChange={e => setEditCollege(e.target.value)}
-                        placeholder="E.g., Dayanand Science College Latur"
+                        placeholder="E.g., COEP / Fergusson College Pune"
                         className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 bg-white focus:outline-hidden focus:border-orange-500"
                       />
                     </div>
@@ -2725,7 +3576,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         type="text"
                         value={editHostel}
                         onChange={e => setEditHostel(e.target.value)}
-                        placeholder="E.g., Sai Hostel, Room 204, Latur"
+                        placeholder="E.g., Sai Hostel, Room 204, Pune"
                         className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 bg-white focus:outline-hidden focus:border-orange-500"
                       />
                     </div>
@@ -2871,71 +3722,212 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
           {/* Verified Result Card */}
           {!isVerifying && scanResult && (
-            <div className={`p-6 rounded-3xl border-4 shadow-xl text-center space-y-4 animate-in fade-in zoom-in-95 bg-white ${
-              scanResult.success ? 'border-emerald-600' : 'border-rose-600'
-            }`}>
-              <div className="flex justify-center">
-                {scanResult.success ? (
-                  <div className="w-16 h-16 rounded-full bg-emerald-100 border-2 border-emerald-500 flex items-center justify-center">
-                    <Check className="w-10 h-10 text-emerald-600 stroke-[3]" />
+            scanResult.success ? (
+              /* DYNAMIC ANTI-FRAUD LIVE SECURITY DINING PASS (ANTI-SCREENSHOT ENFORCED) */
+              <div 
+                onClick={() => {
+                  if (!isTouchVerified) {
+                    setIsTouchVerified(true);
+                    setTimeout(() => setIsTouchVerified(false), 2500);
+                  }
+                }}
+                className="relative z-20 w-full max-w-sm sm:max-w-md mx-auto bg-white rounded-3xl border-2 border-emerald-400 shadow-2xl overflow-hidden p-6 sm:p-7 text-center animate-in fade-in zoom-in-95 duration-300 select-none"
+              >
+                {/* DYNAMIC SHIFTING WATERMARK IN CARD BACKGROUND */}
+                <div className="absolute inset-0 pointer-events-none opacity-[0.04] flex flex-col justify-around rotate-[-12deg] select-none overflow-hidden font-black text-slate-900 text-xs tracking-widest uppercase">
+                  <div className="whitespace-nowrap animate-pulse">
+                    MORYA OFFICIAL LIVE PASS • AUTHENTICATED SCAN • DO NOT SCREENSHOT • {liveSecuritySeconds} • 
                   </div>
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-rose-100 border-2 border-rose-500 flex items-center justify-center">
-                    <XCircle className="w-10 h-10 text-rose-600" />
+                  <div className="whitespace-nowrap">
+                    SEC-TOKEN: #MM-{syncSecurityToken} • LIVE GATE VERIFIED • STRICTLY NON-TRANSFERABLE • 
                   </div>
-                )}
-              </div>
+                  <div className="whitespace-nowrap animate-pulse">
+                    MORYA MESS DINING COUNTER • LIVE TICKS {liveSecuritySeconds} • VALID FOR CURRENT SHIFT ONLY • 
+                  </div>
+                </div>
 
-              <div>
-                <span className={`text-[11px] font-black uppercase tracking-wider block ${
-                  scanResult.success ? 'text-emerald-700' : 'text-rose-700'
-                }`}>
-                  {scanResult.success ? '★ ATTENDANCE RECORDED ★' : 'ATTENDANCE NOT ALLOWED'}
-                </span>
-                <h3 className="text-xl font-black text-slate-900 mt-1">
-                  {scanResult.message}
-                </h3>
-              </div>
-
-              {scanResult.success && (
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs space-y-2 text-left">
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="text-slate-500 font-bold">Meal Shift:</span>
-                    <span className="font-black uppercase text-orange-600">{scanResult.mealShift || shiftAudit.mealType}</span>
+                {/* 1. MORYA MESS OFFICIAL HEADER WITH LIVE TICKING CLOCK */}
+                <div className="relative z-10 flex items-center justify-between pb-3.5 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-xl bg-orange-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                      M
+                    </div>
+                    <span className="font-black text-xs sm:text-sm text-slate-900 tracking-wider uppercase">
+                      {messName || 'MORYA MESS'}
+                    </span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="text-slate-500 font-bold">Member Name:</span>
+
+                  {/* LIVE REAL-TIME SECONDS TICKER (PREVENTS SCREENSHOT FRAUD) */}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-mono font-black shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    <span>{liveSecuritySeconds}</span>
+                  </div>
+                </div>
+
+                {/* 2. GLOWING HOLOGRAPHIC SUCCESS BADGE */}
+                <div className="relative z-10 pt-4 pb-2">
+                  <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+                    {/* Concentric Pulsing Rings */}
+                    <div className="absolute inset-0 rounded-full bg-emerald-400/20 animate-ping" />
+                    <div className="absolute -inset-1.5 rounded-full border-2 border-emerald-400/40 animate-pulse" />
+                    <div className="relative w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                      <Check className="w-9 h-9 stroke-[3.5] animate-in zoom-in-50 duration-300" />
+                    </div>
+                  </div>
+
+                  <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black tracking-widest uppercase border border-emerald-300 mt-3.5 shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>ATTENDANCE VERIFIED</span>
+                  </div>
+                </div>
+
+                {/* 3. HERO: STUDENT NAME */}
+                <div className="relative z-10 py-1.5">
+                  <h1 className="text-2xl min-[360px]:text-3xl sm:text-4xl font-black text-slate-900 tracking-tight leading-[1.15] uppercase break-words">
+                    {customer.name}
+                  </h1>
+                  <div className="flex items-center justify-center gap-2 pt-1 text-xs">
+                    <span className="text-emerald-700 font-bold bg-emerald-50/90 px-2.5 py-0.5 rounded-md border border-emerald-200/70 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      Active Member
+                    </span>
+                    <span className="font-mono font-bold text-slate-400">{customer.id}</span>
+                  </div>
+                </div>
+
+                {/* 4. DYNAMIC ROLLING SECURITY CODE & ELAPSED COUNTER */}
+                <div className="relative z-10 my-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-[11px] font-mono">
+                  <div className="flex items-center gap-1.5 text-slate-600 font-bold">
+                    <Lock className="w-3 h-3 text-emerald-600" />
+                    <span>SYNC TOKEN:</span>
+                    <span className="text-emerald-700 font-black">#MM-{syncSecurityToken}</span>
+                  </div>
+                  <div className="text-slate-500 font-semibold">
+                    {scanTimestamp ? `Scanned ${Math.max(0, Math.floor((Date.now() - scanTimestamp) / 1000))}s ago` : 'Live Gate Verified'}
+                  </div>
+                </div>
+
+                {/* 5. INTERACTIVE TOUCH-TO-VERIFY LIVE APP (COUNTER STAFF TAMPER PROOF) */}
+                <div className="relative z-10 mb-2">
+                  <div
+                    className={`py-2 px-3 rounded-xl border transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+                      isTouchVerified 
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-md scale-[0.99]' 
+                        : 'bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border-emerald-200'
+                    }`}
+                  >
+                    <Fingerprint className={`w-4 h-4 ${isTouchVerified ? 'text-white animate-spin' : 'text-emerald-600'}`} />
+                    <span className="text-[11px] font-black tracking-wide">
+                      {isTouchVerified 
+                        ? '✓ AUTHENTIC LIVE APP VERIFIED (NOT A SCREENSHOT!)' 
+                        : '👆 Touch Card to Verify Live App (Anti-Fraud)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 6. SLEEK HIGH-CONTRAST MEAL & TIME STRIP */}
+                <div className="relative z-10 bg-slate-900 text-white rounded-2xl p-4 flex items-center justify-between shadow-md">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center font-black text-white shadow-xs shrink-0">
+                      <Utensils className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest block">Meal Verified</span>
+                      <span className="text-base sm:text-lg font-black uppercase text-white tracking-wide">
+                        {scanResult.mealShift || shiftAudit.mealType}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right border-l border-slate-800 pl-4 shrink-0">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Marked Time</span>
+                    <span className="text-base sm:text-lg font-mono font-black text-emerald-400">
+                      {scanResult.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 7. LIVE ANTI-SCREENSHOT DISCLAIMER */}
+                <div className="relative z-10 mt-3 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                  <Shield className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>Screenshots & forwarded images are strictly prohibited at dining counter</span>
+                </div>
+
+                {/* 8. ACTION BUTTONS */}
+                <div className="relative z-10 flex flex-col sm:flex-row gap-2.5 mt-4 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScanResult(null);
+                      startCameraStream();
+                    }}
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-orange-600 hover:bg-orange-700 active:scale-[0.98] text-white font-black text-xs sm:text-sm tracking-wide shadow-md shadow-orange-600/20 transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>SCAN AGAIN</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('attendance')}
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-800 font-black text-xs sm:text-sm border border-slate-200 transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Utensils className="w-4 h-4 text-orange-600" />
+                    <span>VIEW MY MEALS ({attendanceMetrics.todayCount > 0 ? attendanceMetrics.todayCount : (validAttendance.length > 0 ? validAttendance.length : 1)})</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* DENIED / ERROR CARD */
+              <div className="relative z-20 w-full max-w-sm sm:max-w-md mx-auto bg-white rounded-3xl border-2 border-rose-300 shadow-2xl p-6 sm:p-7 text-center space-y-4 animate-in fade-in zoom-in-95">
+                <div className="w-16 h-16 rounded-full bg-rose-100 border-2 border-rose-500 flex items-center justify-center mx-auto text-rose-600 shadow-sm">
+                  <XCircle className="w-9 h-9 stroke-[2.5]" />
+                </div>
+
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider text-rose-700 block">
+                    ATTENDANCE NOT ALLOWED
+                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-1">
+                    {scanResult.message}
+                  </h3>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 text-xs space-y-1.5 text-left text-slate-700">
+                  <div className="flex justify-between border-b border-rose-100 pb-1">
+                    <span className="text-slate-500">Student Name:</span>
                     <span className="font-bold text-slate-900">{customer.name}</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="text-slate-500 font-bold">Customer ID:</span>
+                  <div className="flex justify-between border-b border-rose-100 pb-1">
+                    <span className="text-slate-500">Customer ID:</span>
                     <span className="font-mono font-bold text-slate-800">{customer.id}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500 font-bold">Marked Time:</span>
-                    <span className="font-mono font-bold text-emerald-700">{scanResult.time || 'NOW'} ({scanResult.date || today})</span>
+                    <span className="text-slate-500">Meal Shift:</span>
+                    <span className="font-bold uppercase text-orange-600">{scanResult.mealShift || shiftAudit.mealType}</span>
                   </div>
                 </div>
-              )}
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    setScanResult(null);
-                    startCameraStream();
-                  }}
-                  className="flex-1 py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
-                >
-                  Scan Again
-                </button>
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition cursor-pointer"
-                >
-                  Go to Dashboard
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScanResult(null);
+                      startCameraStream();
+                    }}
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Scan Again</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('dashboard')}
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Back to Dashboard</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )
           )}
 
           {/* Live Camera Viewport */}
@@ -3017,6 +4009,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           customer={customer}
           ratings={mealRatings}
           currentShift={shiftAudit}
+          isExpired={isExpired}
           onRatingSubmitted={refreshAllStudentData}
           onRefresh={refreshAllStudentData}
           isRefreshing={isRefreshing}
@@ -3029,7 +4022,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {activeTab === 'notifications' && (
         <StudentNotificationsTab
           customer={customer}
-          notifications={notifications}
+          notifications={combinedNotifications}
           onRefresh={refreshAllStudentData}
           isRefreshing={isRefreshing}
         />
@@ -3053,6 +4046,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         <StudentComplaintsTab
           customer={customer}
           complaints={complaints}
+          isExpired={isExpired}
           onComplaintSubmitted={refreshAllStudentData}
           onRefresh={refreshAllStudentData}
           isRefreshing={isRefreshing}
@@ -3170,6 +4164,159 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   )}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 25-DAY CAMPAIGN NOMINATION FORM MODAL ("NOMINATE ME") */}
+      {/* ========================================================================= */}
+      {isNominateModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 border-2 border-emerald-400">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-500/20">
+                  <Trophy className="w-5 h-5 text-amber-200" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-sm">Nominate for 25-Day Challenge</h3>
+                  <p className="text-[11px] text-slate-500">Zero Food Waste Monthly Competition</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsNominateModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmNomination} className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-emerald-950 space-y-1">
+                <span className="font-extrabold text-[11px] text-emerald-800 uppercase tracking-wider block">🏆 Challenge Prize:</span>
+                <p className="text-xs">
+                  Finish 100% of your meal for <strong>25 days</strong> this month with 0 food waste. Top 5 winners chosen via AI algorithmic draw win <strong>₹50 OFF</strong> on monthly renewal!
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Student Full Name</label>
+                <input
+                  type="text"
+                  disabled
+                  value={customer.name}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-bold text-slate-700 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Phone Number</label>
+                  <input
+                    type="tel"
+                    disabled
+                    value={customer.phone}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono font-bold text-slate-700 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Month-Year</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={currentMonthYear}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono font-bold text-slate-700 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">College / Hostel Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Govt Polytechnic Hostel / Bidve College"
+                  value={nominateCollege}
+                  onChange={(e) => setNominateCollege(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold text-slate-800 outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Your Zero-Waste Pledge *</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="e.g. I pledge to take only what I can finish and maintain 0 food waste for 25 days!"
+                  value={nominatePledge}
+                  onChange={(e) => setNominatePledge(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-medium text-slate-800 outline-none focus:border-emerald-500 resize-none text-xs"
+                />
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="submit"
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-lg shadow-emerald-500/25 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-200" />
+                  <span>Confirm Nomination & Submit to Owner App ➔</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* POST-MEAL SCAN CLEAN PLATE TASK TICK MODAL */}
+      {/* ========================================================================= */}
+      {showPostScanModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 border-2 border-emerald-400">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">🍽️</span>
+                <div>
+                  <h3 className="font-black text-slate-900 text-sm">Post-Meal Clean Plate Check</h3>
+                  <p className="text-[11px] text-slate-500">25-Day Zero Food Waste Campaign</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPostScanModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border border-emerald-200 text-center space-y-2">
+              <Sparkles className="w-8 h-8 text-emerald-600 mx-auto animate-bounce" />
+              <h4 className="font-black text-emerald-950 text-base">
+                Did you finish 100% of your thali today?
+              </h4>
+              <p className="text-xs text-emerald-800">
+                You checked in for your meal! Mark today's Clean Plate task to increment your streak toward the 25-day milestone and ₹50 winner draw!
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={handleStudentDailyTick}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                <span>✅ Yes, 100% Clean Plate! (+1 Day Streak)</span>
+              </button>
+
+              <button
+                onClick={() => setShowPostScanModal(false)}
+                className="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+              >
+                Ask Me Later
+              </button>
             </div>
           </div>
         </div>

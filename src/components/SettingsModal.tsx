@@ -275,7 +275,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>Enforce Strict Shift Timings</span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Lunch: 10:30 AM – 2:30 PM • Dinner: 8:30 PM – 10:30 PM. Gate automatically blocks outside hours.
+                  Lunch: 10:30 AM – 3:00 PM • Dinner: 8:00 PM – 11:00 PM. Gate automatically blocks outside hours.
                 </p>
               </div>
               <input

@@ -43,6 +43,7 @@ export const WalkinPOSView: React.FC<WalkinPOSViewProps> = ({
   const [utrRef, setUtrRef] = useState('');
   const [lastIssuedToken, setLastIssuedToken] = useState<WalkinPOSToken | null>(null);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState('');
+  const [upiId, setUpiId] = useState('moryamess@upi');
 
   useEffect(() => {
     const types = loadWalkinMealTypes().filter(t => t.isActive);
@@ -59,6 +60,7 @@ export const WalkinPOSView: React.FC<WalkinPOSViewProps> = ({
   useEffect(() => {
     if (paymentMode === 'upi' && totalAmount > 0) {
       fetchMessUpiConfig().then(cfg => {
+        if (cfg.upiId) setUpiId(cfg.upiId);
         const upiUrl = `upi://pay?pa=${encodeURIComponent(cfg.upiId)}&pn=${encodeURIComponent(cfg.upiPayeeName)}&am=${totalAmount}&cu=INR&tn=WalkinPOS`;
         QRCode.toDataURL(upiUrl, { width: 220, margin: 1 }).then(setUpiQrDataUrl);
       });
@@ -253,15 +255,34 @@ export const WalkinPOSView: React.FC<WalkinPOSViewProps> = ({
               </div>
 
               {paymentMode === 'upi' && (
-                <div className="p-4 rounded-2xl bg-orange-50/50 border border-orange-200 flex flex-col sm:flex-row items-center gap-4 text-xs">
-                  {upiQrDataUrl && (
+                <div className="p-4 rounded-2xl bg-orange-50/70 border border-orange-200 flex flex-col sm:flex-row items-center gap-4 text-xs">
+                  {upiQrDataUrl ? (
                     <img src={upiQrDataUrl} alt="UPI QR" className="w-28 h-28 rounded-xl border border-white shadow-xs" />
+                  ) : (
+                    <div className="w-28 h-28 rounded-xl bg-orange-100 border border-orange-300 flex items-center justify-center font-bold text-orange-800 text-center text-[10px] p-2">
+                      Official Mess Payment QR
+                    </div>
                   )}
-                  <div className="space-y-2 flex-1">
-                    <span className="font-bold text-slate-800 block">Scan to Pay ₹{totalAmount}</span>
+                  <div className="space-y-2 flex-1 w-full">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 block">Scan to Pay ₹{totalAmount}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(upiId);
+                          alert(`UPI ID copied: ${upiId}`);
+                        }}
+                        className="text-[10px] font-bold text-orange-700 underline hover:text-orange-900 cursor-pointer"
+                      >
+                        Copy UPI ID
+                      </button>
+                    </div>
+                    <div className="text-[11px] font-mono text-orange-950 font-bold bg-white px-2.5 py-1 rounded-lg border border-orange-200">
+                      UPI ID: {upiId}
+                    </div>
                     <input
                       type="text"
-                      placeholder="Optional 12-digit UTR ref from guest..."
+                      placeholder="Optional 12-digit UTR / Transaction Ref..."
                       value={utrRef}
                       onChange={(e) => setUtrRef(e.target.value)}
                       className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono text-xs"

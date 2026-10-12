@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Customer } from '../types/mess';
-import { getTodayString } from '../lib/storage';
-import { X, CreditCard, CheckCircle2 } from 'lucide-react';
+import { CreditCard, CheckCircle2, X } from 'lucide-react';
 
 interface PaymentModalProps {
   customer: Customer | null;
@@ -25,7 +24,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0) return;
-
     onRecordPayment(customer.id, Number(amount), mode, notes);
     onClose();
   };
@@ -72,18 +70,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               required
               placeholder="e.g. 1000"
               value={amount}
-              onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
+              onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-orange-500"
             />
           </div>
 
           <div>
-            <label className="block font-bold text-slate-800 mb-1">
-              Payment Mode *
-            </label>
+            <label className="block font-bold text-slate-800 mb-1">Payment Mode *</label>
             <select
               value={mode}
-              onChange={e => setMode(e.target.value as typeof mode)}
+              onChange={(e) => setMode(e.target.value as any)}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-orange-500"
             >
               <option value="upi">UPI (GPay / PhonePe / QR)</option>
@@ -101,7 +97,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               type="text"
               placeholder="e.g. UPI Ref #892837 or Partial payment"
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-orange-500"
             />
           </div>

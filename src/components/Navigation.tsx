@@ -1,40 +1,36 @@
 import React from 'react';
 import { 
+  Menu,
   LayoutDashboard, 
   Users, 
+  CreditCard, 
   Utensils, 
   Receipt, 
-  UserCheck, 
+  Package, 
   BarChart3, 
-  Settings, 
-  Sparkles,
   QrCode, 
+  Settings, 
+  Bell, 
   ShieldCheck, 
-  ChevronDown, 
-  LogOut, 
-  Calendar, 
-  Layers,
-  Menu,
-  Bell,
-  CreditCard
+  Trophy
 } from 'lucide-react';
 import { UserRole } from '../types/mess';
 
 interface NavigationProps {
   currentTab: string;
-  onTabChange: (tabId: 'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports') => void;
+  onTabChange: (tabId: string) => void;
   currentRole: UserRole;
   onRoleChange: (role: UserRole) => void;
   onOpenScanner: () => void;
   onOpenUniversalQr?: () => void;
+  onOpenTrialQr?: () => void;
+  onOpenPredictCampaignResults?: () => void;
   onOpenSettings: () => void;
   messName?: string;
   pendingLeavesCount?: number;
-  pendingPaymentsCount?: number;
   onSwitchPortal?: () => void;
   onLogout?: () => void;
   userEmail?: string;
-  // Feature 1 & 2 additions
   onOpenDrawer?: () => void;
   onOpenNotifications?: () => void;
   unreadNotificationsCount?: number;
@@ -47,10 +43,11 @@ export const Navigation: React.FC<NavigationProps> = ({
   onRoleChange,
   onOpenScanner,
   onOpenUniversalQr,
+  onOpenTrialQr,
+  onOpenPredictCampaignResults,
   onOpenSettings,
   messName = 'MORYA MESS',
   pendingLeavesCount = 0,
-  pendingPaymentsCount = 0,
   onSwitchPortal,
   onLogout,
   userEmail,
@@ -58,201 +55,163 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenNotifications,
   unreadNotificationsCount = 0
 }) => {
-  const navItems: { id: 'dashboard' | 'customers' | 'meals' | 'payments' | 'expenses' | 'workers' | 'reports'; label: string; icon: React.ElementType; badge?: number }[] = [
+  const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers', label: 'Members', icon: Users },
-    { id: 'meals', label: 'Gate Attendance', icon: Utensils },
-    { 
-      id: 'payments', 
-      label: 'Billing & Payments', 
-      icon: CreditCard,
-      badge: pendingPaymentsCount > 0 ? pendingPaymentsCount : undefined
-    },
-    { id: 'expenses', label: 'Expenses', icon: Receipt },
-    { id: 'workers', label: 'Staff & Kitchen', icon: UserCheck },
-    { 
-      id: 'reports', 
-      label: 'Financial P&L & Audits', 
-      icon: BarChart3,
-      badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined 
-    }
+    { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
+    { id: 'attendance', label: 'Attendance', icon: Utensils },
+    { id: 'finance', label: 'Finance', icon: Receipt },
+    { id: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'reports', label: 'Reports', icon: BarChart3, badge: pendingLeavesCount > 0 ? pendingLeavesCount : undefined }
   ];
 
-  return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16 gap-2 sm:gap-3">
-          {/* Left: Three-Line / Hamburger Drawer Menu Button & Brand */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {onOpenDrawer && (
-              <button
-                id="btn-owner-drawer-menu"
-                onClick={onOpenDrawer}
-                className="p-2 rounded-xl text-slate-700 hover:text-orange-600 hover:bg-orange-50 border border-slate-200 hover:border-orange-200 transition-all cursor-pointer shadow-2xs"
-                title="Open Owner Menu Drawer"
-                aria-label="Open Navigation Menu"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-            )}
+  const getPageContextTitle = () => {
+    switch (currentTab) {
+      case 'dashboard':
+        return 'Operations Cockpit';
+      case 'customers':
+      case 'add_customer':
+      case 'search_customer':
+        return 'Member Management';
+      case 'attendance':
+      case 'scanner':
+        return 'Gate & Attendance Center';
+      case 'subscriptions':
+        return 'Subscription Plans';
+      case 'billing':
+      case 'upi_payments':
+      case 'cash_payments':
+      case 'finance':
+        return 'Billing & Financials';
+      case 'inventory':
+        return 'Kitchen Inventory';
+      case 'reports':
+      case 'attendance_reports':
+      case 'customer_reports':
+      case 'payment_reports':
+      case 'business_summary':
+        return 'Reports & Analytics';
+      default:
+        return 'Management Suite';
+    }
+  };
 
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center font-black text-base sm:text-lg shadow-xs tracking-wider">
-              M
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight">
-                  {messName}
-                </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
-                  PRO
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
-                <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                <span>Hostel Dining Operations</span>
-              </div>
-            </div>
+  return (
+    <header className="sticky top-0 z-40 bg-white/98 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-16 gap-3">
+          {/* Left: Hamburger Menu */}
+          <div className="flex items-center">
+            <button
+              onClick={onOpenDrawer}
+              className="p-2.5 rounded-xl border border-slate-200/90 bg-white hover:bg-orange-50/60 text-slate-700 hover:text-orange-600 transition shadow-2xs cursor-pointer flex items-center justify-center hover:border-orange-200"
+              aria-label="Open Navigation Menu"
+              title="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5 text-orange-600" />
+            </button>
           </div>
 
-          {/* Center Navigation Links (Desktop) */}
-          <nav className="hidden lg:flex items-center gap-1 text-xs font-semibold text-slate-600">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onTabChange(item.id)}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-xl transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-orange-50 text-orange-700 font-bold'
-                      : 'hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-orange-600' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                  {item.badge !== undefined && (
-                    <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse">
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          {/* Center: Clear Premium Orange Badge with Creamy White Typography */}
+          <div className="flex-1 flex items-center justify-center">
+            <button
+              onClick={() => onTabChange('dashboard')}
+              className="inline-flex items-center justify-center px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:to-orange-600 text-[#FFFDF6] shadow-[0_4px_14px_-2px_rgba(249,115,22,0.42)] border border-orange-300/40 ring-1 ring-white/30 hover:shadow-[0_6px_20px_-2px_rgba(249,115,22,0.55)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              title="Return to Main Screen (Dashboard)"
+            >
+              <span className="font-extrabold text-sm sm:text-base md:text-lg text-[#FFFDF6] tracking-wider uppercase font-display select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.18)]">
+                {messName}
+              </span>
+            </button>
+          </div>
 
-          {/* Right Header Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Quick Gate Scanner Button */}
+          {/* Right: Quick Gate Scan, Bell, Settings, Profile */}
+          <div className="flex items-center gap-2">
+            {/* Quick Action: Gate Scanner */}
             <button
               id="btn-nav-scanner"
               onClick={onOpenScanner}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 shadow-xs transition-all cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:to-orange-800 text-white font-bold text-xs shadow-xs transition-all cursor-pointer transform hover:-translate-y-0.5"
             >
               <QrCode className="w-4 h-4" />
-              <span className="hidden sm:inline">Gate Scanner</span>
+              <span>Gate Scan</span>
             </button>
 
-            {/* Universal Standee QR Button */}
-            {onOpenUniversalQr && (
+            {/* Quick Action: Trial Student QR */}
+            {onOpenTrialQr && (
               <button
-                id="btn-nav-universal-qr"
-                onClick={onOpenUniversalQr}
-                className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 shadow-xs transition-all cursor-pointer border border-slate-700"
-                title="Universal Mess Wall / Counter Standee QR"
+                id="btn-nav-trial-qr"
+                onClick={onOpenTrialQr}
+                className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs transform hover:-translate-y-0.5"
+                title="Trial Student QR Standee"
               >
-                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
-                <span>Standee QR</span>
+                <QrCode className="w-4 h-4" />
+                <span>Trial QR</span>
               </button>
             )}
 
-            {/* Notification Bell (FEATURE 1) */}
+            {/* Notification Bell */}
             {onOpenNotifications && (
               <button
-                id="btn-nav-notifications"
                 onClick={onOpenNotifications}
-                className="relative p-2 rounded-xl text-slate-600 hover:text-orange-600 hover:bg-orange-50 border border-slate-200 transition-all cursor-pointer"
-                title="Open Notification Center"
-                aria-label="Notifications"
+                className="relative p-2.5 rounded-xl border border-slate-200/90 bg-white hover:bg-orange-50/60 text-slate-600 hover:text-orange-600 transition shadow-2xs cursor-pointer flex items-center justify-center hover:border-orange-200"
+                title="View Notifications"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="w-4 h-4 text-slate-600" />
                 {unreadNotificationsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-600 text-white text-[10px] font-black flex items-center justify-center border-2 border-white animate-pulse">
-                    {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-orange-600 text-white shadow-xs">
+                    {unreadNotificationsCount}
                   </span>
                 )}
               </button>
             )}
 
-            {/* Portal Switcher Button */}
-            {onSwitchPortal && (
-              <button
-                onClick={onSwitchPortal}
-                className="hidden xl:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-orange-200 bg-orange-50/70 hover:bg-orange-100 text-orange-800 text-xs font-bold transition-all cursor-pointer shadow-xs"
-                title="Switch to Student Digital Pass Portal"
-              >
-                <Layers className="w-3.5 h-3.5 text-orange-600" />
-                <span>Student Portal</span>
-              </button>
-            )}
-
-            {/* Role Switcher Pill */}
-            <div className="relative hidden sm:block">
-              <select
-                value={currentRole}
-                onChange={(e) => onRoleChange(e.target.value as UserRole)}
-                className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold text-xs pl-3 pr-7 py-2 rounded-xl focus:outline-none cursor-pointer"
-              >
-                <option value="owner">Owner</option>
-                <option value="manager">Manager</option>
-                <option value="staff">Staff Gate</option>
-              </select>
-              <ChevronDown className="w-3 h-3 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
             {/* Settings */}
             <button
               onClick={onOpenSettings}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="p-2.5 rounded-xl border border-slate-200/90 bg-white hover:bg-orange-50/60 text-slate-600 hover:text-orange-600 transition shadow-2xs cursor-pointer hover:border-orange-200"
               title="Mess Settings & Rules"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4 text-slate-600" />
             </button>
 
-            {/* Logout Button */}
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 text-xs font-bold transition-colors cursor-pointer border border-slate-200 hover:border-rose-200"
-                title={userEmail ? `Sign out (${userEmail})` : 'Sign Out'}
-              >
-                <LogOut className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600" />
-                <span className="hidden sm:inline">Log Out</span>
-              </button>
-            )}
+            {/* Profile Avatar Chip */}
+            <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                O
+              </div>
+              <div className="text-left hidden xl:block">
+                <div className="text-xs font-semibold text-slate-800 truncate max-w-[130px] leading-tight">
+                  {userEmail || 'Owner'}
+                </div>
+                <div className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 leading-tight">
+                  <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                  <span>Verified Admin</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Mobile Sub-Navigation Bar */}
-        <div className="lg:hidden flex items-center justify-between overflow-x-auto py-2 border-t border-slate-100 gap-1 text-[11px] font-semibold text-slate-600 no-scrollbar">
+        {/* Desktop Tab Navigation */}
+        <div className="hidden xl:flex items-center justify-between py-2 border-t border-slate-100 gap-1.5 text-xs font-semibold">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentTab === item.id;
+            const isActive = currentTab === item.id || (item.id === 'attendance' && currentTab === 'meals') || (item.id === 'finance' && currentTab === 'expenses');
             return (
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
-                className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg whitespace-nowrap cursor-pointer transition-colors ${
+                className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl whitespace-nowrap cursor-pointer transition-all ${
                   isActive
-                    ? 'bg-orange-50 text-orange-700 font-bold'
-                    : 'text-slate-600 hover:bg-slate-50'
+                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold shadow-xs'
+                    : 'text-slate-600 hover:text-orange-600 hover:bg-orange-50/70'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-orange-600' : 'text-slate-400'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
                 {item.badge !== undefined && (
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-white' : 'bg-orange-600'}`} />
                 )}
               </button>
             );
@@ -262,3 +221,4 @@ export const Navigation: React.FC<NavigationProps> = ({
     </header>
   );
 };
+

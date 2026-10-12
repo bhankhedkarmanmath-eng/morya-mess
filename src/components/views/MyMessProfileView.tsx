@@ -25,9 +25,9 @@ export const MyMessProfileView: React.FC<MyMessProfileViewProps> = ({
   onBack
 }) => {
   const [tagline, setTagline] = useState('Homely Dining & Pure Hygienic Meals');
-  const [address, setAddress] = useState('Opposite Boys Hostel, Near Government Engineering College, College Road, Latur - 413512');
+  const [address, setAddress] = useState('Opposite Boys Hostel, Near COEP, FC Road, Pune - 411005');
   const [phone, setPhone] = useState('+91 98220 01122');
-  const [googleMapsUrl, setGoogleMapsUrl] = useState('https://maps.google.com/?q=Latur+Maharashtra');
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('https://maps.google.com/?q=Pune+Maharashtra');
   const [facilities, setFacilities] = useState([
     { id: '1', title: 'RO UV Mineral Drinking Water', active: true },
     { id: '2', title: 'Unlimited Hot Fresh Wheat Chapatis', active: true },
@@ -93,7 +93,7 @@ export const MyMessProfileView: React.FC<MyMessProfileViewProps> = ({
           <div className="flex flex-wrap items-center gap-4 text-xs pt-2 relative z-10 font-medium">
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-orange-200" />
-              <span>College Road, Latur</span>
+              <span>FC Road, Pune</span>
             </span>
             <span>•</span>
             <span className="flex items-center gap-1">

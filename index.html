@@ -15,9 +15,25 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) regs[i].unregister();
+            });
+          }
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              for (var j = 0; j < keys.length; j++) caches.delete(keys[j]);
+            });
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-[#F8F9FC] text-[#1E2028] antialiased selection:bg-orange-600 selection:text-white overflow-x-hidden w-full max-w-full">
+  <body class="bg-[#FBFBFE] text-[#1E293B] antialiased selection:bg-orange-500 selection:text-white overflow-x-hidden w-full max-w-full">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

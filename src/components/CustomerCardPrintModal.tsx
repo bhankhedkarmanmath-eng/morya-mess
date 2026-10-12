@@ -103,7 +103,7 @@ export const CustomerCardPrintModal: React.FC<CustomerCardPrintModalProps> = ({
 
       ctx.fillStyle = '#475569';
       ctx.font = 'bold 15px sans-serif';
-      ctx.fillText('Near Boys & Girls Hostel, College Road, Latur', width / 2, 138);
+      ctx.fillText('Near Boys & Girls Hostel, FC Road, Pune', width / 2, 138);
 
       ctx.fillStyle = '#B45309';
       ctx.font = 'bold 13px sans-serif';

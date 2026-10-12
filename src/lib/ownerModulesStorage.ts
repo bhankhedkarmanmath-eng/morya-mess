@@ -9,7 +9,8 @@ import {
   SupportTicket,
   InventoryItem,
   InventoryMovement,
-  InventorySupplier
+  InventorySupplier,
+  CleanPlateNomination
 } from '../types/mess';
 
 const PREFIX = 'morya_v3_mod_';
@@ -26,7 +27,8 @@ const KEYS = {
   SECURITY_LOGS: `${PREFIX}security_logs`,
   INVENTORY_ITEMS: `${PREFIX}inventory_items`,
   INVENTORY_MOVEMENTS: `${PREFIX}inventory_movements`,
-  INVENTORY_SUPPLIERS: `${PREFIX}inventory_suppliers`
+  INVENTORY_SUPPLIERS: `${PREFIX}inventory_suppliers`,
+  CLEAN_PLATE_NOMINATIONS: `${PREFIX}clean_plate_nominations`
 };
 
 export interface SecurityAuditEntry {
@@ -402,7 +404,7 @@ export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
     unit: 'kg',
     minStockLevel: 40,
     costPerUnit: 38,
-    supplierName: 'Latur Wholesale Grains (APMC)',
+    supplierName: 'Pune Wholesale Grains (Market Yard)',
     lastRestockedDate: '2026-09-24',
     lastUpdated: new Date().toISOString()
   },
@@ -414,7 +416,7 @@ export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
     unit: 'kg',
     minStockLevel: 35,
     costPerUnit: 52,
-    supplierName: 'Latur Wholesale Grains (APMC)',
+    supplierName: 'Pune Wholesale Grains (Market Yard)',
     lastRestockedDate: '2026-09-23',
     lastUpdated: new Date().toISOString()
   },
@@ -426,7 +428,7 @@ export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
     unit: 'kg',
     minStockLevel: 25,
     costPerUnit: 145,
-    supplierName: 'Latur Wholesale Grains (APMC)',
+    supplierName: 'Pune Wholesale Grains (Market Yard)',
     lastRestockedDate: '2026-09-20',
     lastUpdated: new Date().toISOString()
   },
@@ -438,7 +440,7 @@ export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
     unit: 'liter',
     minStockLevel: 20,
     costPerUnit: 135,
-    supplierName: 'Latur Wholesale Grains (APMC)',
+    supplierName: 'Pune Wholesale Grains (Market Yard)',
     lastRestockedDate: '2026-09-22',
     lastUpdated: new Date().toISOString()
   },
@@ -486,7 +488,7 @@ export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
     unit: 'liter',
     minStockLevel: 10,
     costPerUnit: 48,
-    supplierName: 'Rajhans Dairy Centre Latur',
+    supplierName: 'Chitale Dairy Centre Pune',
     lastRestockedDate: '2026-09-26',
     lastUpdated: new Date().toISOString()
   }
@@ -495,10 +497,10 @@ export const DEFAULT_INVENTORY_ITEMS: InventoryItem[] = [
 export const DEFAULT_INVENTORY_SUPPLIERS: InventorySupplier[] = [
   {
     id: 'sup-1',
-    name: 'Latur Wholesale Grains & Provisions (APMC)',
+    name: 'Pune Wholesale Grains & Provisions (Market Yard)',
     phone: '9822012345',
     category: 'Grains, Dals, Oil & Sugar',
-    address: 'Shop 42, Grain Market APMC Yard, Latur',
+    address: 'Shop 42, Market Yard, Pune',
     contactPerson: 'Suresh Patil',
     isActive: true
   },
@@ -507,16 +509,16 @@ export const DEFAULT_INVENTORY_SUPPLIERS: InventorySupplier[] = [
     name: 'Shree Ganesh Vegetable Mart',
     phone: '9822987654',
     category: 'Fresh Vegetables, Onions & Potatoes',
-    address: 'Subhash Chowk Mandi, Latur',
+    address: 'Mahatma Phule Mandai, Pune',
     contactPerson: 'Ganesh Shinde',
     isActive: true
   },
   {
     id: 'sup-3',
-    name: 'Rajhans Dairy Centre Latur',
+    name: 'Chitale Dairy Centre Pune',
     phone: '9423123890',
     category: 'Milk, Curd & Paneer',
-    address: 'Ausa Road, Latur',
+    address: 'Bajirao Road, Pune',
     contactPerson: 'Balasaheb More',
     isActive: true
   },
@@ -525,7 +527,7 @@ export const DEFAULT_INVENTORY_SUPPLIERS: InventorySupplier[] = [
     name: 'Bharat Gas Commercial Agency',
     phone: '9422098765',
     category: 'Commercial 19kg Gas Cylinders',
-    address: 'MIDC Road, Latur',
+    address: 'Hadapsar Industrial Area, Pune',
     contactPerson: 'Agency Desk',
     isActive: true
   }
@@ -580,6 +582,28 @@ export function saveInventorySuppliers(suppliers: InventorySupplier[]): void {
     localStorage.setItem(KEYS.INVENTORY_SUPPLIERS, JSON.stringify(suppliers));
   } catch (e) {
     console.warn('saveInventorySuppliers err:', e);
+  }
+}
+
+// Clean Plate Campaign Storage
+export function loadCleanPlateNominations(): CleanPlateNomination[] {
+  try {
+    const raw = localStorage.getItem(KEYS.CLEAN_PLATE_NOMINATIONS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCleanPlateNominations(nominations: CleanPlateNomination[]): void {
+  try {
+    localStorage.setItem(KEYS.CLEAN_PLATE_NOMINATIONS, JSON.stringify(nominations));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_clean_plate_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
+  } catch (e) {
+    console.warn('saveCleanPlateNominations err:', e);
   }
 }
 

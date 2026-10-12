@@ -55,7 +55,7 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
   // UPI QR and Official VPA Settings State
   const [upiConfig, setUpiConfig] = useState<MessUpiConfig>({
     upiId: 'moryamess@upi',
-    upiPayeeName: 'Morya Mess Latur',
+    upiPayeeName: 'Morya Mess Pune',
     upiQrCodeImage: ''
   });
   const [isSavingUpiConfig, setIsSavingUpiConfig] = useState(false);
@@ -292,7 +292,7 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
 
         <button
           onClick={() => setIsAddPaymentOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:to-orange-800 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Record New Payment</span>
@@ -301,38 +301,38 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
 
       {/* Financial Overview Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 block">Collected Today</span>
           <span className="text-lg font-black text-slate-900 block mt-1">₹{collectedToday.toLocaleString('en-IN')}</span>
           <span className="text-[10px] text-emerald-600 font-semibold">Today's total</span>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 block">UPI Today</span>
           <span className="text-lg font-black text-emerald-600 block mt-1">₹{upiToday.toLocaleString('en-IN')}</span>
           <span className="text-[10px] text-slate-400 font-semibold">Digital collection</span>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 block">Cash Today</span>
           <span className="text-lg font-black text-orange-600 block mt-1">₹{cashToday.toLocaleString('en-IN')}</span>
           <span className="text-[10px] text-slate-400 font-semibold">In register drawer</span>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 block">This Month</span>
           <span className="text-lg font-black text-slate-900 block mt-1">₹{collectedMonth.toLocaleString('en-IN')}</span>
           <span className="text-[10px] text-slate-400 font-semibold">Monthly intake</span>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <span className="text-[11px] font-bold text-slate-500 block">Total Dues Pending</span>
           <span className="text-lg font-black text-rose-600 block mt-1">₹{totalOutstanding.toLocaleString('en-IN')}</span>
           <span className="text-[10px] text-rose-600 font-semibold">{customers.filter(c => c.balance > 0).length} students pending</span>
         </div>
 
         <div className={`p-3.5 rounded-2xl border shadow-2xs ${
-          pendingVerificationCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'
+          pendingVerificationCount > 0 ? 'bg-amber-50/80 border-amber-200' : 'bg-white border-slate-200/80'
         }`}>
           <span className="text-[11px] font-bold text-slate-500 block">Pending Verification</span>
           <span className={`text-lg font-black block mt-1 ${
@@ -345,7 +345,7 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-bold text-slate-600">
           {[
             { id: 'all', label: `All Payments (${payments.length})` },
@@ -359,8 +359,8 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
               onClick={() => setFilterMode(tab.id as any)}
               className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 filterMode === tab.id
-                  ? 'bg-orange-600 text-white shadow-xs'
-                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                  ? 'bg-orange-600 text-white font-bold shadow-xs'
+                  : 'bg-white hover:bg-orange-50/60 hover:text-orange-700 text-slate-700 border border-slate-200'
               }`}
             >
               {tab.id === 'qr_config' && <QrCode className="w-3.5 h-3.5" />}
@@ -377,7 +377,7 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search student, UTR..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-800"
             />
           </div>
         )}
@@ -414,7 +414,7 @@ export const PaymentsManagerView: React.FC<PaymentsManagerViewProps> = ({
                   required
                   value={upiConfig.upiPayeeName}
                   onChange={e => setUpiConfig(prev => ({ ...prev, upiPayeeName: e.target.value }))}
-                  placeholder="e.g. Morya Mess Latur / Bhai Management"
+                  placeholder="e.g. Morya Mess Pune / Bhai Management"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white transition-all"
                 />
               </div>

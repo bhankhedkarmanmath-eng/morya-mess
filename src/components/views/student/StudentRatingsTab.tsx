@@ -7,6 +7,7 @@ interface StudentRatingsTabProps {
   customer: Customer;
   ratings: MealRatingReview[];
   currentShift: MessShiftAudit;
+  isExpired?: boolean;
   onRatingSubmitted: () => void;
   onRefresh: () => void;
   isRefreshing?: boolean;
@@ -16,6 +17,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
   customer,
   ratings,
   currentShift,
+  isExpired = false,
   onRatingSubmitted,
   onRefresh,
   isRefreshing = false
@@ -43,6 +45,14 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isExpired) {
+      setStatusMessage({
+        type: 'error',
+        text: `Cannot submit: Mess subscription expired on ${customer.endDate || 'N/A'}. Please renew your pass with the owner first.`
+      });
+      return;
+    }
+
     if (!ratingScore) {
       setStatusMessage({ type: 'error', text: 'Please select a star rating.' });
       return;
@@ -146,7 +156,26 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
           </div>
         )}
 
-        {alreadyReviewed ? (
+        {isExpired ? (
+          <div className="p-5 sm:p-6 rounded-2xl bg-rose-50 border-2 border-rose-300 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="font-black text-rose-950 text-sm sm:text-base">
+                Subscription Expired — Meal Reviews & Compliments Locked
+              </h4>
+              <p className="text-xs text-rose-800 leading-relaxed max-w-md mx-auto">
+                Your mess pass ended on <strong>{customer.endDate || 'N/A'}</strong>. Meal ratings, culinary feedback, and chef compliments are restricted to active diners.
+              </p>
+            </div>
+            <div className="pt-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-200/80 text-rose-900 text-[11px] font-black">
+                🔒 Please renew your subscription with the mess owner to rate meals
+              </span>
+            </div>
+          </div>
+        ) : alreadyReviewed ? (
           <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-2">
             <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-5 h-5" />

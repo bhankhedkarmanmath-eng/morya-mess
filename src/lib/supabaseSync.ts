@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 export { supabase, isSupabaseConfigured };
 import { Customer, MealLog, Expense, MealType, ScanEligibility } from '../types/mess';
-import { loadCustomers, loadMealLogs, saveMealLogs } from './storage';
+import { loadCustomers, loadMealLogs, saveMealLogs, loadDeletedCustomerIds } from './storage';
 
 export interface SupabaseUserProfile {
   id: string;
@@ -266,7 +266,10 @@ export async function fetchCustomersFromSupabase(messId: string): Promise<Custom
       return [];
     }
 
-    return data.map((row: any) => {
+    const deletedIds = loadDeletedCustomerIds();
+    const validData = data.filter((row: any) => !row.is_deleted && !deletedIds.has(row.id));
+
+    return validData.map((row: any) => {
       // Sort subscriptions by end_date/created_at descending to get active subscription
       const sortedSubs = [...(row.subscriptions || [])].sort((a: any, b: any) => {
         return new Date(b.created_at || b.end_date).getTime() - new Date(a.created_at || a.end_date).getTime();
@@ -714,7 +717,7 @@ export async function ensureCustomerSyncedToSupabase(
     const cleanGender: 'female' | 'male' = customer.gender === 'male' ? 'male' : 'female';
     
     // 1. Upsert customer in public.customers with exact column names:
-    // id, mess_id, full_name, phone, gender, college_name, hostel_name, notes, is_active, is_deleted, approval_status
+    // id, mess_id, full_name, phone, college_name, hostel_name, notes, is_active, is_deleted
     const { error: custErr } = await supabase
       .from('customers')
       .upsert({
@@ -722,13 +725,11 @@ export async function ensureCustomerSyncedToSupabase(
         mess_id: messId,
         full_name: customer.name,
         phone: customer.phone || '9822100000',
-        gender: cleanGender,
         college_name: customer.collegeOrWork || null,
         hostel_name: customer.hostelOrAddress || null,
         notes: customer.notes || null,
         is_active: customer.status === 'active' || customer.status === 'expiring_soon' || customer.status === 'on_leave',
-        is_deleted: false,
-        approval_status: 'approved'
+        is_deleted: false
       }, { onConflict: 'id' });
 
     if (custErr) {
@@ -1251,19 +1252,41 @@ export async function updateCustomerInSupabase(
       custPayload.is_active = updates.status !== 'inactive';
     }
 
-    let custUpdateQuery = supabase
-      .from('customers')
-      .update(custPayload)
-      .eq('id', customerId);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
+    let targetDbId: string | null = isUuid ? customerId : null;
 
-    if (messId) {
-      custUpdateQuery = custUpdateQuery.eq('mess_id', messId);
+    if (!targetDbId) {
+      if (updates.phone) {
+        const { data: found } = await supabase.from('customers').select('id').eq('phone', updates.phone.trim()).maybeSingle();
+        if (found?.id) targetDbId = found.id;
+      }
+      if (!targetDbId && updates.name) {
+        const { data: found } = await supabase.from('customers').select('id').eq('full_name', updates.name.trim()).maybeSingle();
+        if (found?.id) targetDbId = found.id;
+      }
     }
 
-    const { error: custErr } = await custUpdateQuery;
-    if (custErr) {
-      console.error('Error updating customer record:', custErr);
-      return { success: false, error: custErr.message };
+    if (targetDbId) {
+      let custUpdateQuery = supabase
+        .from('customers')
+        .update(custPayload)
+        .eq('id', targetDbId);
+
+      const { error: custErr } = await custUpdateQuery;
+      if (custErr) {
+        console.error('Error updating customer record:', custErr);
+        return { success: false, error: custErr.message };
+      }
+    } else if (updates.phone) {
+      const { error: custErr } = await supabase
+        .from('customers')
+        .update(custPayload)
+        .eq('phone', updates.phone.trim());
+
+      if (custErr) {
+        console.error('Error updating customer record by phone:', custErr);
+        return { success: false, error: custErr.message };
+      }
     }
 
     // 2. Determine target plan if planType or gender changed
@@ -1279,18 +1302,20 @@ export async function updateCustomerInSupabase(
 
     // 3. Update subscription if subscription-related fields are passed
     if (
-      updates.startDate ||
-      updates.endDate ||
-      updates.totalAmount !== undefined ||
-      updates.paidAmount !== undefined ||
-      updates.status !== undefined ||
-      targetPlanId
+      targetDbId && (
+        updates.startDate ||
+        updates.endDate ||
+        updates.totalAmount !== undefined ||
+        updates.paidAmount !== undefined ||
+        updates.status !== undefined ||
+        targetPlanId
+      )
     ) {
       // Find latest subscription
       let subQuery = supabase
         .from('subscriptions')
         .select('id, amount_paid, final_amount, plan_id')
-        .eq('customer_id', customerId)
+        .eq('customer_id', targetDbId)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -1846,9 +1871,12 @@ export function syncWithSupabase(callbacks?: {
   supabase
     .from('customers')
     .select('*')
+    .eq('is_deleted', false)
     .then(({ data, error }) => {
       if (!error && data && data.length > 0 && callbacks?.onCustomersSynced) {
-        const mapped: Customer[] = data.map((d: any) => ({
+        const deletedIds = loadDeletedCustomerIds();
+        const validData = data.filter((d: any) => !d.is_deleted && !deletedIds.has(d.id));
+        const mapped: Customer[] = validData.map((d: any) => ({
           id: d.id,
           name: d.name || d.full_name,
           phone: d.phone,

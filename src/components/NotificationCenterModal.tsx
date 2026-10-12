@@ -17,7 +17,8 @@ import {
   AlertCircle, 
   ShieldAlert, 
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 
 interface NotificationCenterModalProps {
@@ -26,6 +27,8 @@ interface NotificationCenterModalProps {
   notifications: OwnerNotification[];
   onMarkAsRead: (id: string) => void;
   onMarkAllAsRead: () => void;
+  onDeleteNotification?: (id: string) => void;
+  onClearAllRead?: () => void;
   onSelectRecord?: (type: OwnerNotificationType, customerId?: string, recordId?: string) => void;
   onRefresh?: () => void;
   isLoading?: boolean;
@@ -37,6 +40,8 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   notifications,
   onMarkAsRead,
   onMarkAllAsRead,
+  onDeleteNotification,
+  onClearAllRead,
   onSelectRecord,
   onRefresh,
   isLoading = false
@@ -54,7 +59,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
       return ['new_customer', 'new_trial', 'sub_expiring_soon', 'sub_expired', 'leave_request', 'skip_meal'].includes(n.type);
     }
     if (filter === 'complaints') {
-      return ['complaint_received', 'complaint_updated', 'meal_rating', 'poll_response'].includes(n.type);
+      return ['complaint_received', 'complaint_updated', 'meal_rating', 'poll_response', 'complaint'].includes(n.type as any);
     }
     if (filter === 'system') {
       return ['system_security', 'staff_activity'].includes(n.type);
@@ -65,7 +70,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const getNotificationIcon = (type: OwnerNotificationType) => {
-    switch (type) {
+    switch (type as any) {
       case 'payment_received':
       case 'cash_payment':
       case 'upi_payment':
@@ -77,6 +82,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
       case 'sub_expired':
       case 'leave_request':
         return <UserCheck className="w-4 h-4 text-orange-600" />;
+      case 'complaint':
       case 'complaint_received':
       case 'complaint_updated':
         return <MessageSquare className="w-4 h-4 text-amber-600" />;
@@ -160,16 +166,28 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
             ))}
           </div>
 
-          {/* Mark all as read */}
-          {unreadCount > 0 && (
-            <button
-              onClick={onMarkAllAsRead}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-600 hover:text-orange-700 whitespace-nowrap cursor-pointer hover:underline"
-            >
-              <CheckCheck className="w-3.5 h-3.5" />
-              <span>Mark all read</span>
-            </button>
-          )}
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {unreadCount > 0 && (
+              <button
+                onClick={onMarkAllAsRead}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-600 hover:text-orange-700 whitespace-nowrap cursor-pointer hover:underline"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span>Mark all read</span>
+              </button>
+            )}
+            {onClearAllRead && notifications.some(n => n.isRead) && (
+              <button
+                onClick={onClearAllRead}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 whitespace-nowrap cursor-pointer hover:underline"
+                title="Delete all read notifications"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear read</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* List of Notifications */}
@@ -236,15 +254,39 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                               e.stopPropagation();
                               onMarkAsRead(n.id);
                             }}
-                            className="text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-0.5"
+                            className="text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-0.5 cursor-pointer"
                           >
                             <Check className="w-3 h-3" /> Mark read
                           </button>
                         )}
+                        {onDeleteNotification && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteNotification(n.id);
+                            }}
+                            className="text-rose-500 hover:text-rose-700 font-semibold flex items-center gap-0.5 cursor-pointer p-1 hover:bg-rose-50 rounded-lg transition"
+                            title="Delete notification"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {n.customerId && (
-                          <span className="inline-flex items-center gap-0.5 font-bold text-orange-600 group-hover:translate-x-0.5 transition-transform">
-                            View Record <ArrowUpRight className="w-3 h-3" />
-                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!n.isRead) onMarkAsRead(n.id);
+                              if (onSelectRecord) {
+                                onSelectRecord(n.type, n.customerId, n.relatedRecordId);
+                              }
+                              onClose();
+                            }}
+                            className="inline-flex items-center gap-0.5 font-bold text-orange-600 hover:text-orange-700 transition cursor-pointer ml-1 hover:underline text-[11px]"
+                            title="View customer record"
+                          >
+                            <span>View Record</span>
+                            <ArrowUpRight className="w-3 h-3" />
+                          </button>
                         )}
                       </div>
                     </div>

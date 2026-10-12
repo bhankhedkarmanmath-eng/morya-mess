@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-10-09T06:58:27.279Z",
+  "customers": [
+    {
+      "id": "MM-2026-003",
+      "name": "Manmath Bhankhedkar",
+      "phone": "7447527804",
+      "gender": "male",
+      "hostelOrAddress": "Kurunda Complex",
+      "collegeOrWork": "Engineering College",
+      "planType": "monthly_2meals",
+      "totalAmount": 3000,
+      "paidAmount": 3000,
+      "balance": 0,
+      "startDate": "2026-10-09",
+      "endDate": "2026-11-08",
+      "status": "active",
+      "qrToken": "MM-2026-003-TOKEN",
+      "renewals": [],
+      "payments": [
+        {
+          "id": "pay-init-01",
+          "amount": 3000,
+          "date": "2026-10-09",
+          "mode": "upi",
+          "notes": "Monthly Membership Paid via UPI",
+          "recordedBy": "Owner"
+        }
+      ],
+      "leaves": [],
+      "createdAt": "2026-10-09T06:39:48.482Z"
+    }
+  ],
+  "mealLogs": [],
+  "expenses": [],
+  "workers": [],
+  "cleanings": [],
+  "trials": [],
+  "rules": {
+    "messName": "Morya Mess",
+    "messSubtitle": "Digital Operations & Tiffin Service Management",
+    "ganpatiImage": "",
+    "ownerName": "Bhai & Management",
+    "contactPhone": "+91 74475 27804",
+    "address": "Near Girls Hostel Complex, College Road",
+    "currency": "₹",
+    "upiId": "moryamess@upi",
+    "upiPayeeName": "Morya Mess Pune",
+    "upiQrCodeImage": "",
+    "messStatus": "open",
+    "messClosureReason": "",
+    "durationMethod": "calendar",
+    "defaultDurationDays": 30,
+    "allowAdvanceRenewal": true,
+    "defaultMonthlyFee": 2500,
+    "lostCardPenalty": 60,
+    "allowDuplicateMeal": false,
+    "duplicateOverrideAllowed": true,
+    "leaveExtendsSubscription": true,
+    "maxLeaveDaysPerMonth": 7,
+    "expiringSoonAlertDays": 3,
+    "shortTermThresholdDays": 3,
+    "requirePaymentBeforeMeal": false,
+    "mealTypes": [
+      {
+        "type": "lunch",
+        "name": "Lunch Shift",
+        "startTime": "10:30",
+        "endTime": "14:30",
+        "enabled": true
+      },
+      {
+        "type": "dinner",
+        "name": "Dinner Shift",
+        "startTime": "19:30",
+        "endTime": "21:45",
+        "enabled": true
+      }
+    ]
+  },
+  "walkinMealTypes": [],
+  "walkinTokens": [],
+  "weeklyMenu": [],
+  "polls": [],
+  "reminders": [],
+  "mealRatings": [],
+  "complaints": [],
+  "supportTickets": [],
+  "inventoryItems": [],
+  "inventoryMovements": [],
+  "inventorySuppliers": [],
+  "notifications": [],
+  "credentials": {},
+  "deletedCustomerIds": []
+}

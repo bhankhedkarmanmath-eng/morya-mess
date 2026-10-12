@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessReminderNotice } from '../../types/mess';
 import { loadReminders, saveReminders } from '../../lib/ownerModulesStorage';
+import { sendNotificationToStudent } from '../../lib/ownerFeaturesApi';
 import { 
   Clock, 
   ArrowLeft, 
@@ -27,7 +28,7 @@ export const RemindersNoticesView: React.FC<RemindersNoticesViewProps> = ({ onBa
     setReminders(loadReminders());
   }, []);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !message.trim()) return;
 
@@ -44,6 +45,20 @@ export const RemindersNoticesView: React.FC<RemindersNoticesViewProps> = ({ onBa
     setReminders(updated);
     saveReminders(updated);
 
+    // Instant broadcast notification to student notification boxes
+    await sendNotificationToStudent({
+      customerId: null,
+      title: title.trim(),
+      message: message.trim(),
+      type: 'announcement',
+      priority: priority === 'urgent' ? 'urgent' : 'normal'
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_reminders_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
+
     setTitle('');
     setMessage('');
     setIsAddOpen(false);
@@ -53,6 +68,10 @@ export const RemindersNoticesView: React.FC<RemindersNoticesViewProps> = ({ onBa
     const updated = reminders.filter(r => r.id !== id);
     setReminders(updated);
     saveReminders(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_reminders_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
   };
 
   return (

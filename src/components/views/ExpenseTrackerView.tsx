@@ -277,7 +277,7 @@ export const ExpenseTrackerView: React.FC<ExpenseTrackerViewProps> = ({
                 <label className="font-bold text-slate-700 block mb-1">Vendor / Paid To</label>
                 <input
                   type="text"
-                  placeholder="e.g. Bharat Gas / Latur Mandi"
+                  placeholder="e.g. Bharat Gas / Pune Mandi"
                   value={paidTo}
                   onChange={(e) => setPaidTo(e.target.value)}
                   className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-medium text-slate-900"

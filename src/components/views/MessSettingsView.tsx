@@ -100,7 +100,7 @@ export const MessSettingsView: React.FC<MessSettingsViewProps> = ({
                 <label className="font-bold text-slate-700 block mb-1">Mess Full Address</label>
                 <textarea
                   rows={2}
-                  value={form.address || 'Opposite Boys Hostel, Near Government College of Engineering, College Road, Latur - 413512'}
+                  value={form.address || 'Opposite Boys Hostel, Near COEP, FC Road, Pune - 411005'}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                   className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-medium text-slate-900"
                 />

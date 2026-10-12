@@ -289,7 +289,7 @@ export const UniversalQrManagerModal: React.FC<UniversalQrManagerModalProps> = (
                 {messName}
               </h3>
               <p className="text-[11px] text-slate-500 font-medium mb-3">
-                Near Boys & Girls Hostel, College Road, Latur
+                Near Boys & Girls Hostel, FC Road, Pune
               </p>
 
               {/* High-Resolution QR */}

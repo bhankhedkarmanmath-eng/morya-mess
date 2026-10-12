@@ -288,47 +288,92 @@ export const AttendanceScannerScreen: React.FC<AttendanceScannerScreenProps> = (
             </div>
           </div>
 
-          {/* Real-time Scan Result Banner */}
+          {/* Real-time Scan Result Banner & Smart Overdue Gate Alert */}
           {scanResult && (
-            <div className={`p-5 rounded-2xl border shadow-sm flex items-start gap-4 animate-in fade-in zoom-in duration-200 ${
-              scanResult.status === 'success'
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                : scanResult.status === 'warning'
-                ? 'bg-amber-50 border-amber-300 text-amber-950'
-                : 'bg-rose-50 border-rose-300 text-rose-950'
-            }`}>
-              <div className="p-2 rounded-xl bg-white shadow-xs shrink-0">
-                {scanResult.status === 'success' ? (
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                ) : scanResult.status === 'warning' ? (
-                  <AlertTriangle className="w-6 h-6 text-amber-600" />
-                ) : (
-                  <XCircle className="w-6 h-6 text-rose-600" />
-                )}
+            <div className="space-y-3">
+              <div className={`p-5 rounded-2xl border shadow-sm flex items-start gap-4 animate-in fade-in zoom-in duration-200 ${
+                scanResult.status === 'success'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                  : scanResult.status === 'warning'
+                  ? 'bg-amber-50 border-amber-300 text-amber-950'
+                  : 'bg-rose-50 border-rose-300 text-rose-950'
+              }`}>
+                <div className="p-2 rounded-xl bg-white shadow-xs shrink-0">
+                  {scanResult.status === 'success' ? (
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                  ) : scanResult.status === 'warning' ? (
+                    <AlertTriangle className="w-6 h-6 text-amber-600" />
+                  ) : (
+                    <XCircle className="w-6 h-6 text-rose-600" />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0 space-y-1">
+                  <h4 className="font-black text-sm">{scanResult.title}</h4>
+                  <p className="text-xs font-medium opacity-90">{scanResult.message}</p>
+                  {scanResult.customer && (
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs pt-1">
+                      <span className="font-bold">Plan: {scanResult.customer.planType}</span>
+                      <span>•</span>
+                      <span className="font-bold">Valid Until: {scanResult.customer.endDate}</span>
+                      {scanResult.customer.balance > 0 && (
+                        <span className="text-rose-700 font-black px-2 py-0.5 rounded-md bg-rose-100/80">
+                          Due: ₹{scanResult.customer.balance}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex-1 min-w-0 space-y-1">
-                <h4 className="font-black text-sm">{scanResult.title}</h4>
-                <p className="text-xs font-medium opacity-90">{scanResult.message}</p>
-                {scanResult.customer && (
-                  <div className="flex items-center gap-3 text-xs pt-1">
-                    <span className="font-bold">Plan: {scanResult.customer.planType}</span>
-                    <span>•</span>
-                    <span className="font-bold">Valid: {scanResult.customer.endDate}</span>
-                    {scanResult.customer.balance > 0 && (
-                      <span className="text-rose-700 font-black">Due: ₹{scanResult.customer.balance}</span>
+              {/* High-Impact Overdue Action Card at Gate */}
+              {scanResult.customer && scanResult.customer.balance > 0 && (
+                <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-bounce-short">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black shrink-0">
+                      ₹
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-rose-900 flex items-center gap-1.5">
+                        <span>🚨 PENDING DUES ALERT: ₹{scanResult.customer.balance}</span>
+                        <span className="text-[10px] bg-rose-200 text-rose-800 px-2 py-0.5 rounded font-bold">Collect at Gate</span>
+                      </div>
+                      <p className="text-[11px] text-rose-700">
+                        Ask student for fee payment or send instant WhatsApp UPI pay link
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => {
+                        const cust = scanResult.customer!;
+                        const upiId = rules.upiId || 'moryamess@upi';
+                        const messName = rules.messName || 'Morya Mess';
+                        const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(messName)}&am=${cust.balance}&cu=INR`;
+                        const text = `🙏 Namaskar *${cust.name}* ji,\n\nAapki *${messName}* ki monthly mess fees *₹${cust.balance}* pending hai.\n\n⚡ *Niche diye UPI link se turant pay karein:*\n👉 ${upiUrl}\n\n*Mess UPI ID:* \`${upiId}\`\n\nDhanyawad!\n_${messName} Management_`;
+                        const cleanPhone = cust.phone ? cust.phone.replace(/[^0-9]/g, '') : '';
+                        const waUrl = cleanPhone 
+                          ? `https://wa.me/91${cleanPhone.slice(-10)}?text=${encodeURIComponent(text)}`
+                          : `https://wa.me/?text=${encodeURIComponent(text)}`;
+                        window.open(waUrl, '_blank');
+                      }}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>WhatsApp UPI Pay Link</span>
+                    </button>
+
+                    {onOpenPayment && (
+                      <button
+                        onClick={() => onOpenPayment(scanResult.customer!)}
+                        className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                      >
+                        Collect Cash / Settle
+                      </button>
                     )}
                   </div>
-                )}
-              </div>
-
-              {scanResult.customer && scanResult.customer.balance > 0 && onOpenPayment && (
-                <button
-                  onClick={() => onOpenPayment(scanResult.customer!)}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs shrink-0 cursor-pointer"
-                >
-                  Collect Due
-                </button>
+                </div>
               )}
             </div>
           )}
