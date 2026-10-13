@@ -1,22 +1,35 @@
 import React from 'react';
-import { Building, GraduationCap, ShieldCheck, ArrowRight, Sparkles, UtensilsCrossed } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Building, GraduationCap, ShieldCheck, ArrowRight, Sparkles, UtensilsCrossed, Play } from 'lucide-react';
 import { AuthPortal } from '../lib/authService';
 
 interface PortalSelectionScreenProps {
   onSelectPortal: (portal: AuthPortal) => void;
+  onPlayIntro?: () => void;
   messName?: string;
   messSubtitle?: string;
 }
 
 export const PortalSelectionScreen: React.FC<PortalSelectionScreenProps> = ({
   onSelectPortal,
+  onPlayIntro,
   messName = 'MORYA MESS',
   messSubtitle = 'Digital Dining & Mess Operations Management'
 }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50/40 to-slate-50 flex flex-col justify-between p-4 sm:p-6 lg:p-8 selection:bg-orange-500 selection:text-white">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50/40 to-slate-50 flex flex-col justify-between p-4 sm:p-6 lg:p-8 selection:bg-orange-500 selection:text-white"
+    >
       {/* Top Header Branding */}
-      <header className="max-w-5xl w-full mx-auto pt-6 sm:pt-10 text-center">
+      <motion.header
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+        className="max-w-5xl w-full mx-auto pt-6 sm:pt-10 text-center"
+      >
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-orange-100 to-amber-100 border border-orange-200 text-orange-900 text-xs font-black uppercase tracking-wider mb-4 shadow-xs">
           <Sparkles className="w-3.5 h-3.5 text-orange-600 animate-spin" style={{ animationDuration: '6s' }} />
           <span>Morya Mess Management System</span>
@@ -33,10 +46,28 @@ export const PortalSelectionScreen: React.FC<PortalSelectionScreenProps> = ({
         <p className="text-sm sm:text-base text-slate-600 max-w-xl mx-auto mt-2 font-medium">
           {messSubtitle}
         </p>
-      </header>
+
+        {onPlayIntro && (
+          <div className="mt-4">
+            <button
+              onClick={onPlayIntro}
+              id="btn-watch-intro"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs shadow-md shadow-orange-500/20 active:scale-95 transition-all cursor-pointer border border-white/40"
+            >
+              <Play className="w-3.5 h-3.5 fill-white" />
+              <span>▶ Watch Morya Startup Animation</span>
+            </button>
+          </div>
+        )}
+      </motion.header>
 
       {/* Main Choose Portal Selection Card Section */}
-      <main className="max-w-3xl w-full mx-auto my-8 sm:my-10">
+      <motion.main
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.55, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        className="max-w-3xl w-full mx-auto my-8 sm:my-10"
+      >
         <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-orange-200/80 shadow-2xl p-6 sm:p-10">
           <div className="text-center mb-8">
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 font-display">
@@ -120,12 +151,12 @@ export const PortalSelectionScreen: React.FC<PortalSelectionScreenProps> = ({
             </p>
           </div>
         </div>
-      </main>
+      </motion.main>
 
       {/* Footer */}
       <footer className="max-w-5xl w-full mx-auto py-4 text-center text-xs text-slate-400">
         <p>© 2026 {messName} • Near Boys & Girls Hostel, College Road</p>
       </footer>
-    </div>
+    </motion.div>
   );
 };

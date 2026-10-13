@@ -44,7 +44,8 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [expandedFaqs, setExpandedFaqs] = useState<Record<string, boolean>>({
-    'faq-qr': true, // Open first by default
+    'faq-capacitor-apk': true, // Open Capacitor APK guide by default
+    'faq-qr': false,
     'faq-customer': false
   });
 
@@ -78,6 +79,20 @@ export const HelpSupportView: React.FC<HelpSupportViewProps> = ({
   ];
 
   const faqs: FaqItem[] = [
+    {
+      id: 'faq-capacitor-apk',
+      category: 'general',
+      question: '📱 How to convert this Web App into Android APK using CapacitorJS (Step 1 Explained)',
+      answer: 'CapacitorJS (capacitorjs.com) 100% free, official, open-source tool hai jisse bina kisi paise diye, bina kisi watermark ke, aap apni web app ka direct Android APK bana sakte hain.',
+      steps: [
+        'Step 1 (Node.js & Terminal Setup): Apne computer (PC/Laptop) par nodejs.org se Node.js download karke install karein. Phir apne project folder ka terminal (ya Command Prompt) kholein.',
+        'Step 2 (Capacitor Packages Install): Terminal me ye command daalein: npm install @capacitor/core @capacitor/cli',
+        'Step 3 (Initialize Capacitor): Phir ye command chalayein: npx cap init. Yeh aap se App ka naam (jaise "Morya Mess") aur Package ID (jaise "com.moryamess.app") puchega.',
+        'Step 4 (Add Android): Android support add karne ke liye ye command chalayein: npm install @capacitor/android && npx cap add android',
+        'Step 5 (Build & Open in Android Studio): App build karne ke liye chalayein: npm run build && npx cap sync android, aur phir "npx cap open android" se Android Studio me open karke APK generate kar lein!'
+      ],
+      tips: 'Step 1 ka simple matlab hai: computer me Node.js hona chahiye aur terminal me project folder ke andar npm install commands run karni hain!'
+    },
     {
       id: 'faq-qr',
       category: 'attendance_qr',

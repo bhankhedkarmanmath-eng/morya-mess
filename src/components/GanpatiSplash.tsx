@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, ShieldCheck, Sparkles, Utensils } from 'lucide-react';
 
 interface GanpatiSplashProps {
   onFinish?: () => void;
@@ -8,152 +7,197 @@ interface GanpatiSplashProps {
   autoCloseDelay?: number;
   messName?: string;
   messSubtitle?: string;
-  ganpatiImage?: string;
 }
 
 export const GanpatiSplash: React.FC<GanpatiSplashProps> = ({
   onFinish,
   onEnter,
-  autoCloseDelay = 1800,
-  messName = 'MORYA MESS',
-  messSubtitle = 'Digital Dining & Mess Operations Management System',
-  ganpatiImage
+  autoCloseDelay = 1750,
+  messName = 'Morya Mess'
 }) => {
-  const [progress, setProgress] = useState(0);
+  const [isClosing, setIsClosing] = useState(false);
 
-  const handleComplete = () => {
-    if (onFinish) onFinish();
-    if (onEnter) onEnter();
+  const handleInstantExit = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      if (onFinish) onFinish();
+      if (onEnter) onEnter();
+    }, 360);
   };
 
   useEffect(() => {
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const pct = Math.min(100, Math.round((elapsed / autoCloseDelay) * 100));
-      setProgress(pct);
+    const timer = setTimeout(() => {
+      handleInstantExit();
+    }, autoCloseDelay);
 
-      if (elapsed >= autoCloseDelay) {
-        clearInterval(interval);
-        handleComplete();
-      }
-    }, 35);
-
-    return () => clearInterval(interval);
+    return () => clearTimeout(timer);
   }, [autoCloseDelay]);
 
   return (
     <AnimatePresence>
-      <motion.div
-        id="ganpati-splash-screen"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0, scale: 0.99 }}
-        transition={{ duration: 0.35 }}
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white px-6 text-center select-none"
-      >
-        {/* Subtle decorative background circles in warm orange */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center">
-          <div className="w-[450px] h-[450px] rounded-full border border-orange-100/60 opacity-60" />
-          <div className="w-[650px] h-[650px] rounded-full border border-orange-50/40 opacity-40" />
-        </div>
-
+      {!isClosing && (
         <motion.div
-          initial={{ y: 15, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.08, duration: 0.5 }}
-          className="relative z-10 max-w-md w-full flex flex-col items-center"
+          id="morya-cartoon-splash"
+          onClick={handleInstantExit}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, scale: 1.03, filter: 'blur(8px)' }}
+          transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-white select-none px-6 text-center overflow-hidden cursor-pointer"
         >
-          {/* Top Brand Tag */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-50 border border-orange-200 shadow-xs mb-6 text-xs font-bold tracking-wider text-orange-800 uppercase">
-            <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-            <span>MORYA MESS MANAGEMENT</span>
-          </div>
-
-          {/* Ganpati Logo / Brand Icon */}
-          <div className="relative w-32 h-32 mb-6 flex items-center justify-center rounded-3xl bg-white border border-slate-200/90 shadow-sm p-3">
-            {ganpatiImage ? (
-              <img
-                src={ganpatiImage}
-                alt="Morya Mess Emblem"
-                className="w-full h-full object-contain rounded-2xl"
-              />
-            ) : (
-              <svg
-                viewBox="0 0 100 100"
-                className="w-24 h-24 text-orange-600"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                {/* Crown / Mukut */}
-                <path d="M42 22 L50 12 L58 22 Z" fill="#EA580C" stroke="#C2410C" />
-                <circle cx="50" cy="11" r="2" fill="#EA580C" />
-
-                {/* Tilak */}
-                <path d="M50 22 L50 34" stroke="#EA580C" strokeWidth="2.8" />
-                <path d="M46 25 Q50 30 54 25" stroke="#EA580C" strokeWidth="2" />
-
-                {/* Ears */}
-                <path d="M38 28 C26 24, 20 38, 28 50 C32 56, 38 52, 40 48" />
-                <path d="M62 28 C74 24, 80 38, 72 50 C68 56, 62 52, 60 48" />
-
-                {/* Eyes */}
-                <circle cx="43" cy="36" r="1.6" fill="#1E2028" />
-                <circle cx="57" cy="36" r="1.6" fill="#1E2028" />
-
-                {/* Curved Trunk */}
-                <path d="M50 38 Q50 62, 58 64 Q66 66, 64 54 Q62 50, 58 50" strokeWidth="2.8" />
-                <path d="M59 47 C57 44, 63 44, 61 47 Z" fill="#EA580C" />
-
-                {/* Modak & Hand */}
-                <line x1="45" y1="46" x2="42" y2="48" strokeWidth="2.4" />
-                <path d="M30 60 C30 52, 36 50, 38 56" />
-              </svg>
-            )}
-            <div className="absolute -bottom-2.5 px-3 py-0.5 rounded-full bg-orange-600 text-white text-[10px] font-bold tracking-wider shadow-xs">
-              MORYA
-            </div>
-          </div>
-
-          {/* Brand Name */}
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 mb-1">
-            {messName}
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-xs sm:text-sm font-medium text-slate-500 mb-8 max-w-xs">
-            {messSubtitle}
-          </p>
-
-          {/* Progress loader */}
-          <div className="w-60 h-1.5 bg-slate-100 rounded-full overflow-hidden mb-5">
+          {/* ========================================================== */}
+          {/* BACKGROUND DIVINE AURA & SUNBEAM RAY BURSTS                */}
+          {/* ========================================================== */}
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
+            {/* Pulsing Warm Golden-Orange Core Bloom */}
             <motion.div
-              className="h-full bg-orange-600 rounded-full"
-              style={{ width: `${progress}%` }}
-              transition={{ ease: 'linear' }}
+              animate={{
+                scale: [1, 1.22, 1],
+                opacity: [0.35, 0.65, 0.35]
+              }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-[560px] h-[560px] rounded-full bg-gradient-to-r from-orange-500/20 via-amber-300/30 to-transparent blur-3xl pointer-events-none"
             />
+
+            {/* Concentric Golden Shockwave Rings (Fast Pop-in Impact) */}
+            <motion.div
+              initial={{ scale: 0.2, opacity: 0 }}
+              animate={{ scale: [0.2, 1.5], opacity: [0.8, 0] }}
+              transition={{ duration: 1.0, delay: 0.25, ease: 'easeOut' }}
+              className="absolute w-72 h-72 rounded-full border-4 border-orange-300/50 pointer-events-none"
+            />
+            <motion.div
+              initial={{ scale: 0.2, opacity: 0 }}
+              animate={{ scale: [0.2, 1.9], opacity: [0.6, 0] }}
+              transition={{ duration: 1.2, delay: 0.35, ease: 'easeOut' }}
+              className="absolute w-72 h-72 rounded-full border-2 border-amber-200/60 pointer-events-none"
+            />
+
+            {/* Rotating Sacred Sunburst Halo */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+              className="absolute w-[460px] h-[460px] rounded-full border border-orange-200/50 opacity-45 pointer-events-none"
+            >
+              <div className="absolute inset-0 rounded-full border-2 border-dashed border-amber-400/40" />
+            </motion.div>
           </div>
 
-          {/* Quick Enter Action Button */}
-          <button
-            id="btn-skip-splash"
-            onClick={handleComplete}
-            className="group inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-orange-600 text-white text-xs font-bold shadow-xs hover:bg-orange-700 active:scale-98 transition-all cursor-pointer"
-          >
-            <span>Enter Dashboard</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-          </button>
+          {/* ========================================================== */}
+          {/* FLOATING GOLDEN MODAK SPARKLES (Snappy & Alive)             */}
+          {/* ========================================================== */}
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            {[
+              { x: -42, y: -22, delay: 0.1, char: '✦', size: 'text-xl' },
+              { x: 44, y: -30, delay: 0.25, char: '★', size: 'text-2xl' },
+              { x: -22, y: -52, delay: 0.4, char: '✨', size: 'text-xl' },
+              { x: 28, y: -58, delay: 0.55, char: '✦', size: 'text-lg' },
+              { x: -52, y: -72, delay: 0.2, char: '★', size: 'text-xl' },
+              { x: 50, y: -68, delay: 0.5, char: '✨', size: 'text-2xl' }
+            ].map((spark, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, scale: 0, x: spark.x, y: spark.y + 12 }}
+                animate={{
+                  opacity: [0, 1, 0],
+                  scale: [0.4, 1.3, 0.4],
+                  y: [spark.y + 12, spark.y - 28]
+                }}
+                transition={{
+                  duration: 1.6,
+                  delay: spark.delay,
+                  repeat: Infinity,
+                  ease: 'easeInOut'
+                }}
+                className={`absolute ${spark.size} text-amber-400 drop-shadow-[0_2px_10px_rgba(251,191,36,0.9)]`}
+              >
+                {spark.char}
+              </motion.div>
+            ))}
+          </div>
 
-          {/* Anti-fraud note */}
-          <div className="mt-7 flex items-center gap-1.5 text-[11px] text-slate-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Digital QR Verification Active</span>
+          {/* ========================================================== */}
+          {/* 3D CARTOON BAL GANESHA CHARACTER                           */}
+          {/* ========================================================== */}
+          <div className="relative z-10 flex flex-col items-center">
+            <motion.div
+              initial={{ scale: 0.25, y: -70, opacity: 0 }}
+              animate={{
+                scale: [0.25, 1.14, 0.96, 1.03, 1],
+                y: [-70, 10, -6, 2, 0],
+                opacity: 1
+              }}
+              transition={{
+                duration: 0.75,
+                ease: [0.175, 0.885, 0.32, 1.275]
+              }}
+              className="relative w-56 h-56 sm:w-64 sm:h-64 mb-4 flex items-center justify-center overflow-hidden"
+            >
+              {/* Diagonal Light Sheen Beam Sweep across Bal Ganesha */}
+              <motion.div
+                initial={{ x: '-180%' }}
+                animate={{ x: '260%' }}
+                transition={{ duration: 1.1, delay: 0.4, ease: 'easeInOut' }}
+                className="absolute inset-0 w-1/2 h-full bg-gradient-to-r from-transparent via-white/70 to-transparent skew-x-[-25deg] pointer-events-none z-20"
+              />
+
+              {/* Gentle Floating & Playful Tilt Loop */}
+              <motion.div
+                animate={{
+                  y: [0, -8, 0, -5, 0],
+                  rotate: [0, 1.6, 0, -1.6, 0]
+                }}
+                transition={{
+                  duration: 2.8,
+                  repeat: Infinity,
+                  ease: 'easeInOut'
+                }}
+                className="w-full h-full flex items-center justify-center"
+              >
+                <img
+                  src="/src/assets/images/cartoon_bal_ganesha_1791904804248.jpg"
+                  alt="Animated Cartoon Bal Ganesha"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-contain filter drop-shadow-[0_16px_30px_rgba(234,88,12,0.28)]"
+                />
+              </motion.div>
+            </motion.div>
+
+            {/* ========================================================== */}
+            {/* ONLY ONE SINGLE TEXT: Morya Mess                           */}
+            {/* ========================================================== */}
+            <motion.div
+              initial={{ scale: 0.6, y: 18, opacity: 0 }}
+              animate={{
+                scale: [0.6, 1.08, 1],
+                y: [18, -3, 0],
+                opacity: 1
+              }}
+              transition={{
+                duration: 0.55,
+                delay: 0.32,
+                ease: [0.175, 0.885, 0.32, 1.275]
+              }}
+              className="flex flex-col items-center"
+            >
+              <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 font-sans">
+                <span className="bg-gradient-to-r from-slate-900 via-orange-950 to-orange-600 bg-clip-text text-transparent drop-shadow-xs">
+                  {messName || 'Morya Mess'}
+                </span>
+              </h1>
+
+              {/* Smooth Animated Golden Underline Accent */}
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 64, opacity: 1 }}
+                transition={{ duration: 0.45, delay: 0.55, ease: 'easeOut' }}
+                className="h-1.5 rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-600 mt-2.5 shadow-xs"
+              />
+            </motion.div>
           </div>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   );
 };

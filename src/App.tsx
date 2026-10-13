@@ -89,6 +89,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { PortalSwitcherModal } from './components/PortalSwitcherModal';
 import { UniversalQrManagerModal } from './components/UniversalQrManagerModal';
 import { GanpatiSplash } from './components/GanpatiSplash';
+import { ZipperIntroScreen } from './components/ZipperIntroScreen';
 import { PortalSelectionScreen } from './components/PortalSelectionScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { SetNewPasswordScreen } from './components/SetNewPasswordScreen';
@@ -129,7 +130,8 @@ import { SecurityActivityLogView } from './components/views/SecurityActivityLogV
 import { addTrialStudentInSupabase } from './lib/ownerFeaturesApi';
 
 export function App() {
-  const [showSplash, setShowSplash] = useState(false);
+  const [showZipper, setShowZipper] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
   const [authStep, setAuthStep] = useState<'PORTAL_CHOICE' | 'LOGIN' | 'SET_NEW_PASSWORD' | 'AUTHENTICATED'>('PORTAL_CHOICE');
   const [portal, setPortal] = useState<'owner' | 'student'>('owner');
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
@@ -932,28 +934,46 @@ export function App() {
   // Direct public self check-in view when QR is scanned with phone camera (?portal=trial)
   if (isTrialScanMode) {
     return (
-      <TrialStudentPortalView
-        rules={rules}
-        onRegisterTrial={handleRegisterTrial}
-        onExit={() => {
-          if (typeof window !== 'undefined') {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('portal');
-            url.searchParams.delete('view');
-            url.searchParams.delete('mode');
-            window.location.hash = '';
-            window.history.replaceState({}, '', url.pathname);
-          }
-          setIsTrialScanMode(false);
-        }}
-      />
+      <>
+        {showSplash && (
+          <GanpatiSplash
+            onFinish={() => setShowSplash(false)}
+            onEnter={() => setShowSplash(false)}
+            messName={rules.messName}
+            messSubtitle={rules.messSubtitle}
+          />
+        )}
+        <TrialStudentPortalView
+          rules={rules}
+          onRegisterTrial={handleRegisterTrial}
+          onExit={() => {
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('portal');
+              url.searchParams.delete('view');
+              url.searchParams.delete('mode');
+              window.location.hash = '';
+              window.history.replaceState({}, '', url.pathname);
+            }
+            setIsTrialScanMode(false);
+          }}
+        />
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#FBFBFC] text-slate-900 font-sans antialiased flex flex-col selection:bg-orange-600 selection:text-white">
-      {/* Ganpati auspicious start screen */}
-      {showSplash && (
+      {/* Realistic Interactive Zipper Intro Screen */}
+      {showZipper && (
+        <ZipperIntroScreen
+          onUnzipped={() => setShowZipper(false)}
+          messName={rules.messName}
+        />
+      )}
+
+      {/* Ganpati auspicious start screen (plays after zipper is opened) */}
+      {!showZipper && showSplash && (
         <GanpatiSplash
           onFinish={() => setShowSplash(false)}
           onEnter={() => setShowSplash(false)}
@@ -963,11 +983,15 @@ export function App() {
       )}
 
       {/* Auth Flow 1: Portal Choice */}
-      {!showSplash && authStep === 'PORTAL_CHOICE' && (
+      {authStep === 'PORTAL_CHOICE' && (
         <PortalSelectionScreen
           onSelectPortal={(selected) => {
             setPortal(selected);
             setAuthStep('LOGIN');
+          }}
+          onPlayIntro={() => {
+            setShowZipper(true);
+            setShowSplash(true);
           }}
           messName={rules.messName}
           messSubtitle={rules.messSubtitle}
@@ -1073,6 +1097,7 @@ export function App() {
                 userEmail={currentUser?.identifier}
                 onOpenNotifications={() => setIsNotificationsOpen(true)}
                 unreadNotificationsCount={notifications.filter(n => !n.isRead).length}
+                onPlayIntroAnimation={() => setShowSplash(true)}
               />
 
               {/* Owner Drawer Navigation Menu */}
@@ -1116,6 +1141,7 @@ export function App() {
                 onOpenMessPnl={() => setIsMessPnlOpen(true)}
                 onOpenDailyProfitDigest={() => setIsDailyProfitDigestOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                onPlayIntro={() => setShowSplash(true)}
                 onLogout={handleLogout}
                 userEmail={currentUser?.identifier}
               />

@@ -115,6 +115,11 @@ export async function pullSyncFromServer(): Promise<FullSyncState | null> {
       headers: { 'Accept': 'application/json' }
     });
 
+    // 304 Not Modified: Data is unchanged on server
+    if (res.status === 304) {
+      return null;
+    }
+
     if (!res.ok) {
       return null;
     }
@@ -380,18 +385,20 @@ export async function syncCredentialToServer(key: string, credential: any): Prom
 }
 
 /**
- * Start the live polling loop (every 3.5 seconds)
+ * Start the live polling loop (polls every 10s only when document is visible)
  */
 export function startLiveSyncEngine(): () => void {
   // 1. Initial pull immediately
   pullSyncFromServer();
 
-  // 2. Poll every 3500ms
+  // 2. Poll every 10 seconds, but ONLY when tab is actively visible to prevent CPU / container thrashing
   const timer = setInterval(() => {
-    pullSyncFromServer();
-  }, 3500);
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+      pullSyncFromServer();
+    }
+  }, 10000);
 
-  // 3. Pull when user switches back to window/app tab
+  // 3. Immediately pull when user switches back to window/app tab
   const handleVisibility = () => {
     if (document.visibilityState === 'visible') {
       pullSyncFromServer();

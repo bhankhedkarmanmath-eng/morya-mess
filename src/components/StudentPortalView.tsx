@@ -130,6 +130,7 @@ interface StudentPortalViewProps {
   onExitPortal: () => void;
   onRequestLeave: (customerId: string, startDate: string, endDate: string, reason: string) => void;
   onMealLogged?: (newLog: MealLog) => void;
+  onPlayIntroAnimation?: () => void;
   messName?: string;
   messSubtitle?: string;
 }
@@ -162,6 +163,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   onExitPortal,
   onRequestLeave,
   onMealLogged,
+  onPlayIntroAnimation,
   messName = 'MORYA MESS',
   messSubtitle = 'Student Digital Dining Pass & Self-Service Portal'
 }) => {
@@ -1550,8 +1552,18 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             </div>
 
-            {/* Drawer Footer: Log Out */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50">
+            {/* Drawer Footer: Intro & Log Out */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
+              {onPlayIntroAnimation && (
+                <button
+                  type="button"
+                  onClick={() => { setIsDrawerOpen(false); onPlayIntroAnimation(); }}
+                  className="w-full py-2.5 px-3 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
+                >
+                  <span>🛺 3D Welcome Intro Video</span>
+                </button>
+              )}
+
               <button
                 onClick={() => { setIsDrawerOpen(false); setIsLogoutConfirmOpen(true); }}
                 className="w-full py-2.5 px-3 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"

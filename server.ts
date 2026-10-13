@@ -167,8 +167,12 @@ async function startServer() {
   loadDbFromDisk();
 
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  // Always bind internal app container to port 3000 (nginx proxy binds to 8080)
+  const PORT = 3000;
   const HOST = '0.0.0.0';
+
+  // Disable etag for API endpoints to prevent 304 response on polling
+  app.set('etag', false);
 
   app.use(express.json({ limit: '20mb' }));
 
@@ -183,11 +187,12 @@ async function startServer() {
     next();
   });
 
-  // Health check endpoint
-  app.get('/api/health', (_req, res) => {
-    res.json({ 
+  // Comprehensive health check endpoints for Cloud Run, Kubernetes, and proxies
+  app.get(['/health', '/healthz', '/api/health', '/_health', '/ping', '/livez', '/readyz'], (_req, res) => {
+    res.status(200).json({ 
       status: 'ok', 
       app: 'Morya Mess Full-Stack Engine',
+      uptime: process.uptime(),
       customersCount: dbMemory.customers.length,
       mealLogsCount: dbMemory.mealLogs.length,
       timestamp: new Date().toISOString() 
@@ -196,6 +201,8 @@ async function startServer() {
 
   // 1. Central Sync Endpoint (GET - pull all data)
   app.get('/api/sync', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     res.json({
       success: true,
       timestamp: dbMemory.lastUpdated,
@@ -542,20 +549,25 @@ async function startServer() {
 
   const distPath = path.resolve(__dirname, 'dist');
   const indexPath = path.join(distPath, 'index.html');
-  // Only enter production static serving if explicitly NODE_ENV === 'production' AND built index.html exists
-  const isProduction = process.env.NODE_ENV === 'production' && fs.existsSync(indexPath);
+  // Enter production static serving whenever built dist/index.html is available (unless explicitly in development mode)
+  const isProduction = fs.existsSync(indexPath) && process.env.NODE_ENV !== 'development';
 
   if (isProduction) {
-    // 1. Explicit asset resolver: handle stale bundle hashes gracefully without MIME-type error
-    app.get('/assets/:filename', (req, res, next) => {
+    // 1. Static hashed assets from Vite build (immutable long-term caching for high speed)
+    app.use('/assets', express.static(path.join(distPath, 'assets'), {
+      maxAge: '1y',
+      immutable: true
+    }));
+
+    // 2. Explicit asset resolver fallback: handle stale bundle hashes gracefully without MIME-type error
+    app.get('/assets/:filename', (req, res) => {
       const requestedFile = req.params.filename;
       const exactPath = path.join(distPath, 'assets', requestedFile);
       if (fs.existsSync(exactPath)) {
         return res.sendFile(exactPath);
       }
 
-      // If browser has older cached HTML requesting older hash (e.g. index-BBB36BkW.js),
-      // resolve to the newest existing bundle so browser never gets HTML for a JS file!
+      // If browser has older cached HTML requesting older hash, resolve to newest existing bundle
       const assetsDir = path.join(distPath, 'assets');
       if (fs.existsSync(assetsDir)) {
         const files = fs.readdirSync(assetsDir);
@@ -577,17 +589,19 @@ async function startServer() {
       return res.status(404).send('Asset not found');
     });
 
-    // 2. Serve static files from production build with fresh cache control
+    // 3. Serve public root static files from dist (favicon, manifest, icons)
     app.use(express.static(distPath, {
       maxAge: 0,
       setHeaders: (response, filePath) => {
-        response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        if (filePath.endsWith('.html') || filePath.endsWith('.json')) {
+          response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
       }
     }));
 
-    // 3. SPA fallback: send index.html ONLY for navigation requests, NEVER for file assets
+    // 4. SPA fallback: send index.html ONLY for navigation requests, NEVER for file assets
     app.get('*', (req, res, next) => {
-      if (req.path.startsWith('/api')) return next();
+      if (req.path.startsWith('/api') || req.path.startsWith('/health')) return next();
       // Block static file extensions from ever returning index.html
       if (/\.[a-zA-Z0-9]+$/.test(req.path)) {
         return res.status(404).send('File not found');
@@ -616,8 +630,27 @@ async function startServer() {
     }
   });
 
-  app.listen(PORT, HOST, () => {
+  const server = app.listen(PORT, HOST, () => {
     console.log(`[Morya Mess Server] Running on http://${HOST}:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    console.error('[Morya Mess Server Listen Error]:', err);
+  });
+
+  // Handle graceful termination from Cloud Run (SIGTERM / SIGINT)
+  process.on('SIGTERM', () => {
+    console.log('[Morya Mess Server] Received SIGTERM, gracefully closing server...');
+    server.close(() => {
+      console.log('[Morya Mess Server] Closed connections successfully.');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    server.close(() => {
+      process.exit(0);
+    });
   });
 }
 

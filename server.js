@@ -131,8 +131,9 @@ function saveDbToDisk() {
 async function startServer() {
   loadDbFromDisk();
   const app = express();
-  const PORT = Number(process.env.PORT) || 3e3;
+  const PORT = 3e3;
   const HOST = "0.0.0.0";
+  app.set("etag", false);
   app.use(express.json({ limit: "20mb" }));
   app.use((_req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -143,16 +144,19 @@ async function startServer() {
     }
     next();
   });
-  app.get("/api/health", (_req, res) => {
-    res.json({
+  app.get(["/health", "/healthz", "/api/health", "/_health", "/ping", "/livez", "/readyz"], (_req, res) => {
+    res.status(200).json({
       status: "ok",
       app: "Morya Mess Full-Stack Engine",
+      uptime: process.uptime(),
       customersCount: dbMemory.customers.length,
       mealLogsCount: dbMemory.mealLogs.length,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   });
   app.get("/api/sync", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
     res.json({
       success: true,
       timestamp: dbMemory.lastUpdated,
@@ -457,12 +461,57 @@ async function startServer() {
     }
   });
   const distPath = path.resolve(__dirname, "dist");
-  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(distPath);
-  if (isProduction && fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
+  const indexPath = path.join(distPath, "index.html");
+  const isProduction = fs.existsSync(indexPath) && process.env.NODE_ENV !== "development";
+  if (isProduction) {
+    app.use("/assets", express.static(path.join(distPath, "assets"), {
+      maxAge: "1y",
+      immutable: true
+    }));
+    app.get("/assets/:filename", (req, res) => {
+      const requestedFile = req.params.filename;
+      const exactPath = path.join(distPath, "assets", requestedFile);
+      if (fs.existsSync(exactPath)) {
+        return res.sendFile(exactPath);
+      }
+      const assetsDir = path.join(distPath, "assets");
+      if (fs.existsSync(assetsDir)) {
+        const files = fs.readdirSync(assetsDir);
+        if (requestedFile.endsWith(".js")) {
+          const currentJs = files.find((f) => f.startsWith("index-") && f.endsWith(".js"));
+          if (currentJs) {
+            res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+            return res.sendFile(path.join(assetsDir, currentJs));
+          }
+        }
+        if (requestedFile.endsWith(".css")) {
+          const currentCss = files.find((f) => f.startsWith("index-") && f.endsWith(".css"));
+          if (currentCss) {
+            res.setHeader("Content-Type", "text/css; charset=utf-8");
+            return res.sendFile(path.join(assetsDir, currentCss));
+          }
+        }
+      }
+      return res.status(404).send("Asset not found");
+    });
+    app.use(express.static(distPath, {
+      maxAge: 0,
+      setHeaders: (response, filePath) => {
+        if (filePath.endsWith(".html") || filePath.endsWith(".json")) {
+          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        }
+      }
+    }));
     app.get("*", (req, res, next) => {
-      if (req.path.startsWith("/api")) return next();
-      res.sendFile(path.join(distPath, "index.html"));
+      if (req.path.startsWith("/api") || req.path.startsWith("/health")) return next();
+      if (/\.[a-zA-Z0-9]+$/.test(req.path)) {
+        return res.status(404).send("File not found");
+      }
+      if (fs.existsSync(indexPath)) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        return res.sendFile(indexPath);
+      }
+      return res.status(404).send("Application bundle not found. Please build or run dev.");
     });
   } else {
     const { createServer } = await import("vite");
@@ -472,8 +521,29 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   }
-  app.listen(PORT, HOST, () => {
+  app.use((err, req, res, next) => {
+    console.error("[Morya Mess Server Error]:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Internal Server Error");
+    }
+  });
+  const server = app.listen(PORT, HOST, () => {
     console.log(`[Morya Mess Server] Running on http://${HOST}:${PORT}`);
+  });
+  server.on("error", (err) => {
+    console.error("[Morya Mess Server Listen Error]:", err);
+  });
+  process.on("SIGTERM", () => {
+    console.log("[Morya Mess Server] Received SIGTERM, gracefully closing server...");
+    server.close(() => {
+      console.log("[Morya Mess Server] Closed connections successfully.");
+      process.exit(0);
+    });
+  });
+  process.on("SIGINT", () => {
+    server.close(() => {
+      process.exit(0);
+    });
   });
 }
 startServer().catch((err) => {

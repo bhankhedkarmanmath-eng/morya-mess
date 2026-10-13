@@ -72,6 +72,7 @@ interface OwnerDrawerMenuProps {
   onOpenDailyProfitDigest?: () => void;
   onSwitchPortal?: () => void;
   onOpenSettings?: () => void;
+  onPlayIntro?: () => void;
   onLogout?: () => void;
   userEmail?: string;
 }
@@ -96,6 +97,7 @@ export const OwnerDrawerMenu: React.FC<OwnerDrawerMenuProps> = ({
   onOpenDailyProfitDigest,
   onSwitchPortal,
   onOpenSettings,
+  onPlayIntro,
   onLogout,
   userEmail
 }) => {
@@ -484,6 +486,22 @@ export const OwnerDrawerMenu: React.FC<OwnerDrawerMenuProps> = ({
               </div>
             );
           })}
+
+          {/* Play Startup Animation button */}
+          {onPlayIntro && (
+            <div className="pt-2 border-t border-slate-100">
+              <button
+                onClick={() => { onClose(); onPlayIntro(); }}
+                className="w-full min-h-[42px] px-3 py-2 rounded-xl text-left text-xs flex items-center justify-between bg-orange-50/80 hover:bg-orange-100/90 text-orange-900 font-bold transition cursor-pointer border border-orange-200/70"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="w-4.5 h-4.5 shrink-0 text-orange-600" strokeWidth={2} />
+                  <span>▶ Play Startup Video / Animation</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-orange-500" />
+              </button>
+            </div>
+          )}
 
           {/* Settings in Drawer */}
           {onOpenSettings && (
