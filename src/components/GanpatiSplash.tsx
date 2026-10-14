@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface GanpatiSplashProps {
@@ -12,39 +12,49 @@ interface GanpatiSplashProps {
 export const GanpatiSplash: React.FC<GanpatiSplashProps> = ({
   onFinish,
   onEnter,
-  autoCloseDelay = 1750,
+  autoCloseDelay = 2200,
   messName = 'Morya Mess'
 }) => {
   const [isClosing, setIsClosing] = useState(false);
+  const finishedRef = useRef(false);
 
-  const handleInstantExit = () => {
+  const handleFinish = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (onFinish) onFinish();
+    if (onEnter) onEnter();
+  }, [onFinish, onEnter]);
+
+  const handleInstantExit = useCallback(() => {
     if (isClosing) return;
     setIsClosing(true);
     setTimeout(() => {
-      if (onFinish) onFinish();
-      if (onEnter) onEnter();
-    }, 360);
-  };
+      handleFinish();
+    }, 280);
+  }, [isClosing, handleFinish]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       handleInstantExit();
     }, autoCloseDelay);
 
-    return () => clearTimeout(timer);
-  }, [autoCloseDelay]);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [autoCloseDelay, handleInstantExit]);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={handleFinish}>
       {!isClosing && (
         <motion.div
           id="morya-cartoon-splash"
           onClick={handleInstantExit}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.03, filter: 'blur(8px)' }}
-          transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-white select-none px-6 text-center overflow-hidden cursor-pointer"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.02, filter: 'blur(6px)' }}
+          transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+          style={{ willChange: 'opacity, transform', transform: 'translateZ(0)' }}
+          className="fixed inset-0 z-[999990] flex flex-col items-center justify-center bg-white select-none px-6 text-center overflow-hidden cursor-pointer"
         >
           {/* ========================================================== */}
           {/* BACKGROUND DIVINE AURA & SUNBEAM RAY BURSTS                */}
@@ -158,6 +168,8 @@ export const GanpatiSplash: React.FC<GanpatiSplashProps> = ({
                 <img
                   src="/src/assets/images/cartoon_bal_ganesha_1791904804248.jpg"
                   alt="Animated Cartoon Bal Ganesha"
+                  loading="eager"
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain filter drop-shadow-[0_16px_30px_rgba(234,88,12,0.28)]"
                 />

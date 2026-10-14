@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Building, GraduationCap, ShieldCheck, ArrowRight, Sparkles, UtensilsCrossed, Play } from 'lucide-react';
+import { Building, GraduationCap, ShieldCheck, ArrowRight, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { AuthPortal } from '../lib/authService';
 
 interface PortalSelectionScreenProps {
@@ -12,7 +12,6 @@ interface PortalSelectionScreenProps {
 
 export const PortalSelectionScreen: React.FC<PortalSelectionScreenProps> = ({
   onSelectPortal,
-  onPlayIntro,
   messName = 'MORYA MESS',
   messSubtitle = 'Digital Dining & Mess Operations Management'
 }) => {
@@ -46,19 +45,6 @@ export const PortalSelectionScreen: React.FC<PortalSelectionScreenProps> = ({
         <p className="text-sm sm:text-base text-slate-600 max-w-xl mx-auto mt-2 font-medium">
           {messSubtitle}
         </p>
-
-        {onPlayIntro && (
-          <div className="mt-4">
-            <button
-              onClick={onPlayIntro}
-              id="btn-watch-intro"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs shadow-md shadow-orange-500/20 active:scale-95 transition-all cursor-pointer border border-white/40"
-            >
-              <Play className="w-3.5 h-3.5 fill-white" />
-              <span>▶ Watch Morya Startup Animation</span>
-            </button>
-          </div>
-        )}
       </motion.header>
 
       {/* Main Choose Portal Selection Card Section */}

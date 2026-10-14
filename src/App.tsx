@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Customer, MealLog, Expense, Worker, CleaningInspection, BusinessRulesConfig, TrialVisitor, UserRole, ScanEligibility, MealType, Gender } from './types/mess';
 import {
   loadCustomers,
@@ -28,6 +28,7 @@ import {
   syncMealLogToSupabase,
   syncExpenseToSupabase,
   updateCustomerInSupabase,
+  fetchCustomersFromSupabase,
   fetchAttendanceLogsFromSupabase,
   subscribeToAttendanceLogs
 } from './lib/supabaseSync';
@@ -131,11 +132,23 @@ import { addTrialStudentInSupabase } from './lib/ownerFeaturesApi';
 
 export function App() {
   const [showZipper, setShowZipper] = useState(true);
-  const [showSplash, setShowSplash] = useState(true);
-  const [authStep, setAuthStep] = useState<'PORTAL_CHOICE' | 'LOGIN' | 'SET_NEW_PASSWORD' | 'AUTHENTICATED'>('PORTAL_CHOICE');
-  const [portal, setPortal] = useState<'owner' | 'student'>('owner');
-  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
-  const [passwordResetUser, setPasswordResetUser] = useState<AuthenticatedUser | null>(null);
+  const [showSplash, setShowSplash] = useState(false);
+  const [authStep, setAuthStep] = useState<'PORTAL_CHOICE' | 'LOGIN' | 'SET_NEW_PASSWORD' | 'AUTHENTICATED'>(() => {
+    const saved = getSavedSession();
+    if (saved) {
+      return saved.mustChangePassword ? 'SET_NEW_PASSWORD' : 'AUTHENTICATED';
+    }
+    return 'PORTAL_CHOICE';
+  });
+  const [portal, setPortal] = useState<'owner' | 'student'>(() => {
+    const saved = getSavedSession();
+    return saved?.role === 'student' ? 'student' : 'owner';
+  });
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => getSavedSession());
+  const [passwordResetUser, setPasswordResetUser] = useState<AuthenticatedUser | null>(() => {
+    const saved = getSavedSession();
+    return saved?.mustChangePassword ? saved : null;
+  });
 
   const [customers, setCustomers] = useState<Customer[]>(() => loadCustomers());
   const [mealLogs, setMealLogs] = useState<MealLog[]>(() => loadMealLogs());
@@ -147,9 +160,18 @@ export function App() {
 
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [reportsInitialTab, setReportsInitialTab] = useState<'pnl' | 'expiry_watch' | 'trials' | 'leave_approvals'>('pnl');
-  const [currentRole, setCurrentRole] = useState<UserRole>('owner');
-  const [currentPortal, setCurrentPortal] = useState<'owner' | 'student'>('owner');
-  const [selectedStudentCustomer, setSelectedStudentCustomer] = useState<Customer | null>(null);
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const saved = getSavedSession();
+    return saved && saved.role !== 'student' ? (saved.role as UserRole) : 'owner';
+  });
+  const [currentPortal, setCurrentPortal] = useState<'owner' | 'student'>(() => {
+    const saved = getSavedSession();
+    return saved?.role === 'student' ? 'student' : 'owner';
+  });
+  const [selectedStudentCustomer, setSelectedStudentCustomer] = useState<Customer | null>(() => {
+    const saved = getSavedSession();
+    return saved?.studentCustomer || null;
+  });
 
   // Modals & Navigation Drawer
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -321,9 +343,19 @@ export function App() {
       }
     });
 
-    // Also sync to Supabase where supported
-    loadCustomers().forEach(c => {
-      syncCustomerToSupabase(c, '63b00e12-a702-492f-bd56-1e260338699f');
+    const messId = '63b00e12-a702-492f-bd56-1e260338699f';
+
+    // Primary Database: Fetch fresh source-of-truth directly from Supabase
+    fetchCustomersFromSupabase(messId).then((dbCustomers) => {
+      if (isMounted && Array.isArray(dbCustomers) && dbCustomers.length > 0) {
+        setCustomers(dbCustomers);
+      }
+    });
+
+    fetchAttendanceLogsFromSupabase(messId).then((dbLogs) => {
+      if (isMounted && Array.isArray(dbLogs) && dbLogs.length > 0) {
+        setMealLogs(dbLogs);
+      }
     });
 
     return () => {
@@ -931,14 +963,37 @@ export function App() {
 
   const pendingLeavesCount = customers.flatMap(c => c.leaves || []).filter(l => !l.approved).length;
 
+  // Seamless intro transitions between Zipper, GanpatiSplash, and App content
+  const handleZipperComplete = useCallback(() => {
+    setShowSplash(true);
+    setShowZipper(false);
+  }, []);
+
+  const handleSplashFinish = useCallback(() => {
+    setShowSplash(false);
+  }, []);
+
+  const handlePlayIntroAnimation = useCallback(() => {
+    setShowSplash(false);
+    setShowZipper(true);
+  }, []);
+
+  const isIntroActive = showZipper || showSplash;
+
   // Direct public self check-in view when QR is scanned with phone camera (?portal=trial)
   if (isTrialScanMode) {
     return (
       <>
+        {showZipper && (
+          <ZipperIntroScreen
+            onComplete={handleZipperComplete}
+            messName={rules.messName}
+          />
+        )}
         {showSplash && (
           <GanpatiSplash
-            onFinish={() => setShowSplash(false)}
-            onEnter={() => setShowSplash(false)}
+            onFinish={handleSplashFinish}
+            onEnter={handleSplashFinish}
             messName={rules.messName}
             messSubtitle={rules.messSubtitle}
           />
@@ -964,19 +1019,19 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#FBFBFC] text-slate-900 font-sans antialiased flex flex-col selection:bg-orange-600 selection:text-white">
-      {/* Realistic Interactive Zipper Intro Screen */}
+      {/* Stage 1: Interactive Denim Zipper Intro */}
       {showZipper && (
         <ZipperIntroScreen
-          onUnzipped={() => setShowZipper(false)}
+          onComplete={handleZipperComplete}
           messName={rules.messName}
         />
       )}
 
-      {/* Ganpati auspicious start screen (plays after zipper is opened) */}
-      {!showZipper && showSplash && (
+      {/* Stage 2: Divine Ganpati Splash Screen (Chained via requestAnimationFrame) */}
+      {showSplash && (
         <GanpatiSplash
-          onFinish={() => setShowSplash(false)}
-          onEnter={() => setShowSplash(false)}
+          onFinish={handleSplashFinish}
+          onEnter={handleSplashFinish}
           messName={rules.messName}
           messSubtitle={rules.messSubtitle}
         />
@@ -989,17 +1044,13 @@ export function App() {
             setPortal(selected);
             setAuthStep('LOGIN');
           }}
-          onPlayIntro={() => {
-            setShowZipper(true);
-            setShowSplash(true);
-          }}
           messName={rules.messName}
           messSubtitle={rules.messSubtitle}
         />
       )}
 
       {/* Auth Flow 2: Login */}
-      {!showSplash && authStep === 'LOGIN' && (
+      {authStep === 'LOGIN' && (
         <LoginScreen
           portal={portal}
           onBack={() => setAuthStep('PORTAL_CHOICE')}
@@ -1026,7 +1077,7 @@ export function App() {
       )}
 
       {/* Auth Flow 3: Set New Password */}
-      {!showSplash && authStep === 'SET_NEW_PASSWORD' && passwordResetUser && (
+      {authStep === 'SET_NEW_PASSWORD' && passwordResetUser && (
         <SetNewPasswordScreen
           user={passwordResetUser}
           onPasswordSetSuccessfully={(usr) => {
@@ -1049,7 +1100,7 @@ export function App() {
       )}
 
       {/* Authenticated State */}
-      {!showSplash && authStep === 'AUTHENTICATED' && (
+      {authStep === 'AUTHENTICATED' && (
         currentPortal === 'student' && (selectedStudentCustomer || currentUser?.studentCustomer) ? (
           <StudentPortalView
             customer={selectedStudentCustomer || (currentUser?.studentCustomer as Customer)}
@@ -1076,6 +1127,7 @@ export function App() {
             }}
             messName={rules.messName}
             messSubtitle={rules.messSubtitle}
+            onPlayIntroAnimation={handlePlayIntroAnimation}
           />
         ) : (
           <>
@@ -1097,7 +1149,7 @@ export function App() {
                 userEmail={currentUser?.identifier}
                 onOpenNotifications={() => setIsNotificationsOpen(true)}
                 unreadNotificationsCount={notifications.filter(n => !n.isRead).length}
-                onPlayIntroAnimation={() => setShowSplash(true)}
+                onPlayIntroAnimation={handlePlayIntroAnimation}
               />
 
               {/* Owner Drawer Navigation Menu */}
@@ -1141,7 +1193,7 @@ export function App() {
                 onOpenMessPnl={() => setIsMessPnlOpen(true)}
                 onOpenDailyProfitDigest={() => setIsDailyProfitDigestOpen(true)}
                 onOpenSettings={() => setIsSettingsOpen(true)}
-                onPlayIntro={() => setShowSplash(true)}
+                onPlayIntro={handlePlayIntroAnimation}
                 onLogout={handleLogout}
                 userEmail={currentUser?.identifier}
               />

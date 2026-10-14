@@ -1554,15 +1554,6 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
             {/* Drawer Footer: Intro & Log Out */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
-              {onPlayIntroAnimation && (
-                <button
-                  type="button"
-                  onClick={() => { setIsDrawerOpen(false); onPlayIntroAnimation(); }}
-                  className="w-full py-2.5 px-3 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
-                >
-                  <span>🛺 3D Welcome Intro Video</span>
-                </button>
-              )}
 
               <button
                 onClick={() => { setIsDrawerOpen(false); setIsLogoutConfirmOpen(true); }}

@@ -169,17 +169,6 @@ export const Navigation: React.FC<NavigationProps> = ({
               </button>
             )}
 
-            {/* Intro Animation Replay */}
-            {onPlayIntroAnimation && (
-              <button
-                onClick={onPlayIntroAnimation}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-orange-200 bg-orange-50/80 hover:bg-orange-100 text-orange-950 font-bold text-xs transition shadow-2xs cursor-pointer"
-                title="Play Morya Startup Animation"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-                <span>Morya Intro</span>
-              </button>
-            )}
 
             {/* Settings */}
             <button
