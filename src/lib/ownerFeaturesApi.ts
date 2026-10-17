@@ -39,7 +39,7 @@ import {
   saveInventorySuppliers,
   addSecurityLog
 } from './ownerModulesStorage';
-import { loadCustomers, saveCustomers, loadMealLogs, loadTrials, saveTrials, getTodayString, evaluateStrictMessShift, calculateDaysRemaining } from './storage';
+import { loadCustomers, saveCustomers, loadMealLogs, loadTrials, saveTrials, getTodayString, evaluateStrictMessShift, calculateDaysRemaining, MAX_MONTHLY_LEAVE_DAYS, calculateMonthLeaveDaysUsed, calculateDaysInRangeForMonth } from './storage';
 import { pushSyncToServer, syncComplaintToServer, syncRatingToServer } from './syncEngine';
 
 export const DEFAULT_MESS_ID = '63b00e12-a702-492f-bd56-1e260338699f';
@@ -331,9 +331,27 @@ export async function createOwnerNotification(params: {
     createdAt: new Date().toISOString()
   };
 
-  // 1. Guaranteed local persistence
+  // 1. Guaranteed local persistence with smart de-duplication
   const existing = loadLocalNotifications();
-  // Filter out any duplicate of same relatedRecordId to prevent duplicate clutter
+  const now = Date.now();
+
+  // Deduplication check: if identical notification for same customer + type created within last 30s or matching relatedRecordId, skip!
+  const isDuplicate = existing.some(n => {
+    if (params.relatedRecordId && n.relatedRecordId === params.relatedRecordId) {
+      return true;
+    }
+    const createdTime = new Date(n.createdAt).getTime();
+    const isVeryRecent = Math.abs(now - createdTime) < 30000;
+    if (isVeryRecent && n.customerId === params.customerId && n.type === params.type && (n.title === params.title || n.message === params.message)) {
+      return true;
+    }
+    return false;
+  });
+
+  if (isDuplicate) {
+    return true; // Prevent duplicate notification
+  }
+
   const filtered = params.relatedRecordId 
     ? existing.filter(n => n.relatedRecordId !== params.relatedRecordId) 
     : existing;
@@ -2702,6 +2720,27 @@ export async function submitStudentLeaveRequest(params: {
       return {
         success: false,
         error: `Cannot apply for leave: Mess subscription expired on ${targetCust.endDate || 'N/A'}. Please renew your pass with the mess owner first.`
+      };
+    }
+
+    // Strict 5-Day Monthly Leave Limit Check
+    const targetMonth = params.startDate.substring(0, 7); // e.g. '2026-10'
+    const existingLeaves = targetCust.leaves || [];
+    const usedDaysInMonth = calculateMonthLeaveDaysUsed(existingLeaves, targetMonth);
+    const requestedDaysInMonth = calculateDaysInRangeForMonth(params.startDate, params.endDate, targetMonth);
+
+    if (usedDaysInMonth >= MAX_MONTHLY_LEAVE_DAYS) {
+      return {
+        success: false,
+        error: `⚠️ Monthly Leave Limit Reached: You have already applied for ${usedDaysInMonth} day(s) of leave for this month. The maximum allowed limit is ${MAX_MONTHLY_LEAVE_DAYS} days per month.`
+      };
+    }
+
+    if (usedDaysInMonth + requestedDaysInMonth > MAX_MONTHLY_LEAVE_DAYS) {
+      const remainingQuota = Math.max(0, MAX_MONTHLY_LEAVE_DAYS - usedDaysInMonth);
+      return {
+        success: false,
+        error: `⚠️ Monthly Leave Limit Exceeded: You have already applied for ${usedDaysInMonth} day(s) of leave this month. You have only ${remainingQuota} day(s) remaining (Maximum ${MAX_MONTHLY_LEAVE_DAYS} days per month allowed).`
       };
     }
   }

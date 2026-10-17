@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Customer, MealLog } from '../types/mess';
+import { Customer, MealLog, MealPreference } from '../types/mess';
 import { 
   Customer360Data, 
   fetchCustomer360Profile, 
@@ -9,6 +9,7 @@ import {
 } from '../lib/ownerFeaturesApi';
 import { updateCustomerInSupabase } from '../lib/supabaseSync';
 import { loadCustomers, saveCustomers } from '../lib/storage';
+import { pushSyncToServer } from '../lib/syncEngine';
 import { loadSecurityLogs } from '../lib/ownerModulesStorage';
 import { 
   X, 
@@ -218,6 +219,43 @@ export const Customer360Modal: React.FC<Customer360ModalProps> = ({
     }
     setIsSavingProfile(false);
     setIsEditingDemographics(false);
+  };
+
+  const handleQuickPlanSwitch = async (newPlan: 'both_meals' | 'lunch_only' | 'dinner_only') => {
+    const planType = newPlan === 'lunch_only' ? 'monthly_lunch_only' : (newPlan === 'dinner_only' ? 'monthly_dinner_only' : 'monthly_2meals');
+    const mealPreference: MealPreference = newPlan === 'lunch_only' ? 'lunch_only' : (newPlan === 'dinner_only' ? 'dinner_only' : 'lunch_dinner');
+    
+    const updates: Partial<Customer> = {
+      planType,
+      mealPreference
+    };
+
+    if (customer) {
+      await updateCustomerInSupabase('63b00e12-a702-492f-bd56-1e260338699f', activeCust.id || customer.id, updates);
+      const local = loadCustomers();
+      const updated: Customer[] = local.map(c => 
+        c.id === activeCust.id || c.id === customer.id || (activeCust.phone && c.phone === activeCust.phone) || (customer.phone && c.phone === customer.phone)
+          ? { ...c, planType, mealPreference }
+          : c
+      );
+      saveCustomers(updated);
+      pushSyncToServer({ customers: updated });
+
+      setData360(prev => prev ? {
+        ...prev,
+        customer: {
+          ...prev.customer,
+          planType,
+          mealPreference
+        }
+      } : null);
+
+      await load360();
+      if (onCustomerUpdated) onCustomerUpdated();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('storage'));
+      }
+    }
   };
 
   const tabs: { id: TabType; label: string; count?: number }[] = [
@@ -556,19 +594,89 @@ export const Customer360Modal: React.FC<Customer360ModalProps> = ({
           {/* TAB 2: SUBSCRIPTION */}
           {!isLoading && activeTab === 'subscription' && (
             <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h4 className="font-black text-slate-900 text-sm">{activeCust.planType}</h4>
-                  <p className="text-slate-500 text-xs">Hostel Dining Membership Subscription</p>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-black text-slate-900 text-sm">
+                      {activeCust.planType?.replace(/_/g, ' ').toUpperCase()}
+                    </h4>
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                      activeCust.mealPreference === 'lunch_only' || (activeCust.planType?.toLowerCase().includes('lunch') && !activeCust.planType?.toLowerCase().includes('dinner'))
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : activeCust.mealPreference === 'dinner_only' || (activeCust.planType?.toLowerCase().includes('dinner') && !activeCust.planType?.toLowerCase().includes('lunch'))
+                          ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                          : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    }`}>
+                      {activeCust.mealPreference === 'lunch_only' || (activeCust.planType?.toLowerCase().includes('lunch') && !activeCust.planType?.toLowerCase().includes('dinner'))
+                        ? '☀️ 1 Meal: Lunch Only (दुपार)'
+                        : activeCust.mealPreference === 'dinner_only' || (activeCust.planType?.toLowerCase().includes('dinner') && !activeCust.planType?.toLowerCase().includes('lunch'))
+                          ? '🌙 1 Meal: Dinner Only (रात्र)'
+                          : '🍽️ 2 Meals: Lunch + Dinner'}
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    {activeCust.mealPreference === 'lunch_only' || (activeCust.planType?.toLowerCase().includes('lunch') && !activeCust.planType?.toLowerCase().includes('dinner'))
+                      ? '🔒 Gate scanner strictly permits Lunch only (10:30 AM – 3:00 PM). Dinner is locked.'
+                      : activeCust.mealPreference === 'dinner_only' || (activeCust.planType?.toLowerCase().includes('dinner') && !activeCust.planType?.toLowerCase().includes('lunch'))
+                        ? '🔒 Gate scanner strictly permits Dinner only (8:00 PM – 11:00 PM). Lunch is locked.'
+                        : 'Full Dining Access: Unlimited Chapatis & Sabji for both Lunch & Dinner shifts.'}
+                  </p>
                 </div>
                 {onOpenRenew && (
                   <button
                     onClick={() => onOpenRenew(activeCust)}
-                    className="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                    className="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs cursor-pointer shadow-xs self-start sm:self-auto"
                   >
                     Renew / Extend
                   </button>
                 )}
+              </div>
+
+              {/* Quick Shift & Plan Switcher */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                    Change Member Authorized Shift / Plan:
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-semibold">
+                    Instant sync to gate scanner
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPlanSwitch('both_meals')}
+                    className={`py-2 px-2 rounded-lg border text-xs text-center transition cursor-pointer font-bold ${
+                      activeCust.mealPreference === 'lunch_dinner' || activeCust.planType === 'monthly_2meals'
+                        ? 'border-orange-500 bg-white ring-2 ring-orange-500/20 text-orange-950 shadow-xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    🍽️ 2 Meals (Both)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPlanSwitch('lunch_only')}
+                    className={`py-2 px-2 rounded-lg border text-xs text-center transition cursor-pointer font-bold ${
+                      activeCust.mealPreference === 'lunch_only' || activeCust.planType === 'monthly_lunch_only'
+                        ? 'border-orange-500 bg-white ring-2 ring-orange-500/20 text-orange-950 shadow-xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    ☀️ 1 Meal: Lunch Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickPlanSwitch('dinner_only')}
+                    className={`py-2 px-2 rounded-lg border text-xs text-center transition cursor-pointer font-bold ${
+                      activeCust.mealPreference === 'dinner_only' || activeCust.planType === 'monthly_dinner_only'
+                        ? 'border-orange-500 bg-white ring-2 ring-orange-500/20 text-orange-950 shadow-xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    🌙 1 Meal: Dinner Only
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

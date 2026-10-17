@@ -1,9 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Default project configuration for Morya Mess
-const FALLBACK_URL = 'https://ylrdkekxsfvsujdpomse.supabase.co';
-const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlscmRrZWt4c2Z2c3VqZHBvbXNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NzEyMjIsImV4cCI6MjEwNTA0NzIyMn0.S4zCWxKc8_0jAbuV5UzEE805Bulj3QXllFjo5YQZIoo';
-
+// Supabase client configuration for Morya Mess
 function isValidHttpUrl(stringUrl?: string | null): boolean {
   if (!stringUrl || typeof stringUrl !== 'string' || stringUrl.trim() === '') {
     return false;
@@ -23,12 +20,9 @@ function getResolvedConfig() {
   let resolvedUrl: string | null = null;
   let resolvedKey: string | null = null;
 
-  if (isValidHttpUrl(envUrl)) {
+  if (isValidHttpUrl(envUrl) && envKey && envKey.length > 10) {
     resolvedUrl = envUrl!;
-    resolvedKey = (envKey && envKey.length > 10) ? envKey : FALLBACK_KEY;
-  } else if (isValidHttpUrl(FALLBACK_URL)) {
-    resolvedUrl = FALLBACK_URL;
-    resolvedKey = (envKey && envKey.length > 10) ? envKey : FALLBACK_KEY;
+    resolvedKey = envKey;
   }
 
   return { url: resolvedUrl, key: resolvedKey };

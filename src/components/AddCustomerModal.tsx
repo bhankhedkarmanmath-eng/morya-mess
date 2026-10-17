@@ -148,14 +148,18 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
     updatePriceForGenderAndPlan(gender, planType, preset);
   };
 
-  const handlePlanChange = (newPlan: string) => {
-    setPlanType(newPlan);
-    if (newPlan === 'monthly_1meal') {
-      setMealPreference('lunch_only');
+  const handlePlanChange = (newPlan: string, shiftPref?: MealPreference) => {
+    if (newPlan === 'monthly_1meal' || newPlan === 'monthly_lunch_only' || newPlan === 'monthly_dinner_only') {
+      const pref = shiftPref || (newPlan === 'monthly_dinner_only' ? 'dinner_only' : (mealPreference === 'dinner_only' ? 'dinner_only' : 'lunch_only'));
+      const planCode = pref === 'dinner_only' ? 'monthly_dinner_only' : 'monthly_lunch_only';
+      setPlanType(planCode);
+      setMealPreference(pref);
+      updatePriceForGenderAndPlan(gender, planCode, durationPreset);
     } else {
+      setPlanType('monthly_2meals');
       setMealPreference('lunch_dinner');
+      updatePriceForGenderAndPlan(gender, 'monthly_2meals', durationPreset);
     }
-    updatePriceForGenderAndPlan(gender, newPlan, durationPreset);
   };
 
   const handleStartDateChange = (newStart: string) => {
@@ -497,18 +501,74 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
                     type="button"
                     onClick={() => handlePlanChange('monthly_1meal')}
                     className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                      planType === 'monthly_1meal'
+                      planType !== 'monthly_2meals'
                         ? 'border-orange-500 bg-orange-50/80 ring-2 ring-orange-500/20'
                         : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                   >
                     <div className="font-black text-slate-900 text-xs sm:text-sm">1 Meal / Day</div>
-                    <div className="text-[11px] text-slate-500">Single Shift</div>
+                    <div className="text-[11px] text-slate-500">
+                      {mealPreference === 'dinner_only' ? 'Dinner Only (रात्र)' : 'Lunch Only (दुपार)'}
+                    </div>
                     <div className="text-xs font-black text-orange-700 mt-1">
                       ₹{gender === 'female' ? '1,300' : '1,600'}
                     </div>
                   </button>
                 </div>
+
+                {/* Specific Shift Selection for 1-Meal Pass */}
+                {planType !== 'monthly_2meals' && (
+                  <div className="p-3 bg-amber-50/80 border border-amber-200/90 rounded-xl space-y-2.5 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <span>⚡ Shift Lock (कडक नियम):</span>
+                      </span>
+                      <span className="text-[10px] font-extrabold bg-amber-200/90 text-amber-900 px-2 py-0.5 rounded-full">
+                        Gate Scanner Enforced
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePlanChange('monthly_lunch_only', 'lunch_only')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 ${
+                          mealPreference === 'lunch_only'
+                            ? 'border-orange-500 bg-white ring-2 ring-orange-500/30 text-orange-950 shadow-xs font-black'
+                            : 'border-amber-200/70 bg-white/70 hover:bg-white text-slate-700 font-semibold'
+                        }`}
+                      >
+                        <span className="text-lg">☀️</span>
+                        <div>
+                          <div className="text-xs">Lunch Only</div>
+                          <div className="text-[10px] text-slate-500 font-normal">दुपार (10:30–3:00)</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePlanChange('monthly_dinner_only', 'dinner_only')}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 ${
+                          mealPreference === 'dinner_only'
+                            ? 'border-orange-500 bg-white ring-2 ring-orange-500/30 text-orange-950 shadow-xs font-black'
+                            : 'border-amber-200/70 bg-white/70 hover:bg-white text-slate-700 font-semibold'
+                        }`}
+                      >
+                        <span className="text-lg">🌙</span>
+                        <div>
+                          <div className="text-xs">Dinner Only</div>
+                          <div className="text-[10px] text-slate-500 font-normal">रात्र (8:00–11:00)</div>
+                        </div>
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-amber-900 font-medium leading-tight">
+                      {mealPreference === 'lunch_only'
+                        ? '🔒 हा विद्यार्थी फक्त दुपारच्या वेळी जेवू शकेल. रात्री गेट कॅमेऱ्याने स्कॅन केल्यास सिस्टम आपोआप ब्लॉक करेल.'
+                        : '🔒 हा विद्यार्थी फक्त रात्रीच्या वेळी जेवू शकेल. दुपारी गेट कॅमेऱ्याने स्कॅन केल्यास सिस्टम आपोआप ब्लॉक करेल.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Duration Presets */}
                 <div>

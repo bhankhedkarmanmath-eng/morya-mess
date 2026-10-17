@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Customer } from '../types/mess';
+import { Customer, MealPreference } from '../types/mess';
 import { getTodayString, getStandardFee } from '../lib/storage';
-import { X, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { X, RefreshCw, CheckCircle2, Sun, Moon, Utensils } from 'lucide-react';
 
 interface RenewalModalProps {
   customer: Customer | null;
   isOpen: boolean;
   onClose: () => void;
-  onRenew: (customerId: string, newStart: string, newEnd: string, amount: number, paid: number, notes?: string) => void;
+  onRenew: (
+    customerId: string, 
+    newStart: string, 
+    newEnd: string, 
+    amount: number, 
+    paid: number, 
+    notes?: string,
+    planType?: string,
+    mealPreference?: MealPreference
+  ) => void;
 }
 
 export const RenewalModal: React.FC<RenewalModalProps> = ({
@@ -18,6 +27,22 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
 }) => {
   const today = getTodayString();
   
+  // Compute initial selected plan from existing customer data
+  const detectCustomerPlan = (): 'both_meals' | 'lunch_only' | 'dinner_only' => {
+    if (!customer) return 'both_meals';
+    const pref = (customer.mealPreference || '').toLowerCase();
+    const plan = (customer.planType || '').toLowerCase();
+    if (pref === 'lunch_only' || plan === 'monthly_lunch_only' || (plan.includes('lunch') && !plan.includes('dinner'))) {
+      return 'lunch_only';
+    }
+    if (pref === 'dinner_only' || plan === 'monthly_dinner_only' || (plan.includes('dinner') && !plan.includes('lunch'))) {
+      return 'dinner_only';
+    }
+    return 'both_meals';
+  };
+
+  const [selectedPlan, setSelectedPlan] = useState<'both_meals' | 'lunch_only' | 'dinner_only'>('both_meals');
+
   // Compute new start date: if customer's end date is in the future, start the day after. Otherwise, start today.
   const initialStart = (() => {
     if (!customer) return today;
@@ -37,21 +62,33 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
     return d.toISOString().split('T')[0];
   })();
 
-  const calculatedStandardFee = customer ? getStandardFee(customer.gender, customer.planType) : 2500;
-
   const [startDate, setStartDate] = useState(initialStart);
   const [endDate, setEndDate] = useState(initialEnd);
-  const [amount, setAmount] = useState(calculatedStandardFee);
-  const [paidAmount, setPaidAmount] = useState(calculatedStandardFee);
+  const [amount, setAmount] = useState(2500);
+  const [paidAmount, setPaidAmount] = useState(2500);
   const [notes, setNotes] = useState('Monthly Renewal (30 Days)');
 
   useEffect(() => {
     if (customer) {
-      const fee = getStandardFee(customer.gender, customer.planType);
+      const initialPlan = detectCustomerPlan();
+      setSelectedPlan(initialPlan);
+      const planCode = initialPlan === 'lunch_only' ? 'monthly_lunch_only' : (initialPlan === 'dinner_only' ? 'monthly_dinner_only' : 'monthly_2meals');
+      const fee = getStandardFee(customer.gender, planCode);
       setAmount(fee);
       setPaidAmount(fee);
+      setNotes(`Monthly Renewal (${initialPlan === 'lunch_only' ? 'Lunch Only' : (initialPlan === 'dinner_only' ? 'Dinner Only' : '2 Meals')})`);
     }
   }, [customer]);
+
+  const handlePlanSelect = (plan: 'both_meals' | 'lunch_only' | 'dinner_only') => {
+    setSelectedPlan(plan);
+    if (!customer) return;
+    const planCode = plan === 'lunch_only' ? 'monthly_lunch_only' : (plan === 'dinner_only' ? 'monthly_dinner_only' : 'monthly_2meals');
+    const fee = getStandardFee(customer.gender, planCode);
+    setAmount(fee);
+    setPaidAmount(fee);
+    setNotes(`Monthly Renewal (${plan === 'lunch_only' ? 'Lunch Only' : (plan === 'dinner_only' ? 'Dinner Only' : '2 Meals')})`);
+  };
 
   if (!isOpen || !customer) return null;
 
@@ -64,7 +101,9 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onRenew(customer.id, startDate, endDate, Number(amount), Number(paidAmount), notes);
+    const planType = selectedPlan === 'lunch_only' ? 'monthly_lunch_only' : (selectedPlan === 'dinner_only' ? 'monthly_dinner_only' : 'monthly_2meals');
+    const mealPreference: MealPreference = selectedPlan === 'lunch_only' ? 'lunch_only' : (selectedPlan === 'dinner_only' ? 'dinner_only' : 'lunch_dinner');
+    onRenew(customer.id, startDate, endDate, Number(amount), Number(paidAmount), notes, planType, mealPreference);
     onClose();
   };
 
@@ -92,6 +131,67 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          {/* Plan & Shift Selection */}
+          <div className="space-y-2">
+            <label className="block font-black text-slate-700 uppercase tracking-wider text-[11px]">
+              Select Renewal Pass Plan & Shift
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handlePlanSelect('both_meals')}
+                className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                  selectedPlan === 'both_meals'
+                    ? 'border-orange-500 bg-orange-50/90 text-orange-950 ring-2 ring-orange-500/30 font-black'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold'
+                }`}
+              >
+                <div className="text-base mb-0.5">🍽️</div>
+                <div className="text-[11px]">2 Meals</div>
+                <div className="text-[10px] text-orange-700 font-bold mt-0.5">
+                  ₹{customer.gender === 'female' ? '2,500' : '3,000'}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePlanSelect('lunch_only')}
+                className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                  selectedPlan === 'lunch_only'
+                    ? 'border-orange-500 bg-orange-50/90 text-orange-950 ring-2 ring-orange-500/30 font-black'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold'
+                }`}
+              >
+                <div className="text-base mb-0.5">☀️</div>
+                <div className="text-[11px]">Lunch Only</div>
+                <div className="text-[10px] text-orange-700 font-bold mt-0.5">
+                  ₹{customer.gender === 'female' ? '1,300' : '1,600'}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePlanSelect('dinner_only')}
+                className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                  selectedPlan === 'dinner_only'
+                    ? 'border-orange-500 bg-orange-50/90 text-orange-950 ring-2 ring-orange-500/30 font-black'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold'
+                }`}
+              >
+                <div className="text-base mb-0.5">🌙</div>
+                <div className="text-[11px]">Dinner Only</div>
+                <div className="text-[10px] text-orange-700 font-bold mt-0.5">
+                  ₹{customer.gender === 'female' ? '1,300' : '1,600'}
+                </div>
+              </button>
+            </div>
+            {selectedPlan !== 'both_meals' && (
+              <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 font-medium">
+                🔒 Gate Restriction: Student will ONLY be authorized for {selectedPlan === 'lunch_only' ? 'Lunch shift (दुपार)' : 'Dinner shift (रात्र)'}. Opposite shift scans will be strictly blocked.
+              </p>
+            )}
+          </div>
+
           {/* Current Expiry & Fee Info */}
           <div className="p-3 bg-orange-50/60 rounded-xl border border-orange-200 text-slate-700">
             <div className="flex justify-between items-center mb-1">
@@ -99,7 +199,7 @@ export const RenewalModal: React.FC<RenewalModalProps> = ({
                 {customer.gender === 'female' ? 'Girls Hostel Plan' : 'Boys Hostel Plan'}
               </span>
               <span className="text-xs font-black text-orange-700">
-                Standard: ₹{getStandardFee(customer.gender, customer.planType)} / 30 Days
+                Rate: ₹{amount} / 30 Days
               </span>
             </div>
             <div className="text-[11px] text-slate-600 flex justify-between">

@@ -115,7 +115,13 @@ export function getStandardFee(
   plan: 'both_meals' | 'one_meal' | 'monthly_2meals' | 'monthly_1meal' | string
 ): number {
   const isFemale = gender === 'female';
-  const isOneMeal = plan === 'one_meal' || plan === 'monthly_1meal';
+  const planLower = (plan || '').toLowerCase();
+  const isOneMeal = planLower === 'one_meal' || 
+    planLower === 'monthly_1meal' || 
+    planLower.includes('1meal') || 
+    planLower.includes('lunch_only') || 
+    planLower.includes('dinner_only') ||
+    planLower === 'single';
 
   if (isFemale) {
     return isOneMeal ? STANDARD_PRICING.female.one_meal : STANDARD_PRICING.female.both_meals;
@@ -660,10 +666,52 @@ export function auditCustomerMealScan(
     };
   }
 
-  // 4.5 1-Time Meal Plan Integrity Check (Male ₹1600 / Female ₹1300)
-  const isOneMealPlan = customer.planType === 'monthly_1meal' || customer.mealPreference === 'lunch_only' || customer.mealPreference === 'dinner_only';
+  // 4.5 1-Time Meal Pass Strict Shift & Integrity Check (Male ₹1600 / Female ₹1300)
+  const planLower = (customer.planType || '').toLowerCase();
+  const prefLower = (customer.mealPreference || '').toLowerCase();
+
+  const isLunchOnly = prefLower === 'lunch_only' || 
+    planLower === 'monthly_lunch_only' || 
+    planLower === 'lunch_only' || 
+    (planLower.includes('lunch') && !planLower.includes('dinner') && !planLower.includes('2meal'));
+
+  const isDinnerOnly = prefLower === 'dinner_only' || 
+    planLower === 'monthly_dinner_only' || 
+    planLower === 'dinner_only' || 
+    (planLower.includes('dinner') && !planLower.includes('lunch') && !planLower.includes('2meal'));
+
+  const isOneMealPlan = isLunchOnly || isDinnerOnly || planLower === 'monthly_1meal' || planLower === 'one_meal' || prefLower === 'single';
+
   if (isOneMealPlan) {
-    // Check if customer already took any meal today
+    // 4.5.1 STRICT SHIFT RESTRICTION: Lunch-Only cannot scan for Dinner
+    if (isLunchOnly && mealType === 'dinner') {
+      return {
+        eligibility: 'BLOCK',
+        customer,
+        reason: `⚠️ STRICT SHIFT RESTRICTION (फक्त दुपारचा पास): Student has a 1-Time LUNCH-ONLY Pass. DINNER scan is strictly prohibited under this subscription!`,
+        alreadyAteToday: false,
+        daysRemaining,
+        unpaidPenalty,
+        hasUnpaidBalance,
+        mealType
+      };
+    }
+
+    // 4.5.2 STRICT SHIFT RESTRICTION: Dinner-Only cannot scan for Lunch
+    if (isDinnerOnly && mealType === 'lunch') {
+      return {
+        eligibility: 'BLOCK',
+        customer,
+        reason: `⚠️ STRICT SHIFT RESTRICTION (फक्त रात्रीचा पास): Student has a 1-Time DINNER-ONLY Pass. LUNCH scan is strictly prohibited under this subscription!`,
+        alreadyAteToday: false,
+        daysRemaining,
+        unpaidPenalty,
+        hasUnpaidBalance,
+        mealType
+      };
+    }
+
+    // 4.5.3 1-Time Daily Consumption Limit Check (Prevent second meal of any kind)
     const anyMealToday = mealLogs.find(
       log => log.customerId === customer.id && log.date === todayStr && log.scanStatus === 'ALLOW'
     );
@@ -672,33 +720,8 @@ export function auditCustomerMealScan(
       return {
         eligibility: 'BLOCK',
         customer,
-        reason: `1-TIME PLAN LIMIT: Member is enrolled in 1-Time Daily plan (₹${customer.gender === 'female' ? 1300 : 1600}/month). Already consumed ${anyMealToday.mealType.toUpperCase()} today at ${recordedTime}. Second meal blocked!`,
+        reason: `1-TIME PASS LIMIT: Member is enrolled in 1-Time Daily Pass (₹${customer.gender === 'female' ? 1300 : 1600}/month). Already consumed ${anyMealToday.mealType.toUpperCase()} today at ${recordedTime}. Second meal blocked!`,
         alreadyAteToday: true,
-        daysRemaining,
-        unpaidPenalty,
-        hasUnpaidBalance,
-        mealType
-      };
-    }
-    // Check specific shift preference
-    if (customer.mealPreference === 'lunch_only' && mealType === 'dinner') {
-      return {
-        eligibility: 'BLOCK',
-        customer,
-        reason: `PLAN RESTRICTION: Member plan is registered for LUNCH ONLY. Dinner scan is not permitted under this subscription.`,
-        alreadyAteToday: false,
-        daysRemaining,
-        unpaidPenalty,
-        hasUnpaidBalance,
-        mealType
-      };
-    }
-    if (customer.mealPreference === 'dinner_only' && mealType === 'lunch') {
-      return {
-        eligibility: 'BLOCK',
-        customer,
-        reason: `PLAN RESTRICTION: Member plan is registered for DINNER ONLY. Lunch scan is not permitted under this subscription.`,
-        alreadyAteToday: false,
         daysRemaining,
         unpaidPenalty,
         hasUnpaidBalance,
@@ -852,3 +875,66 @@ export function exportCustomersCsv(customers: Customer[]): string {
   ]);
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 }
+
+// ----------------------------------------------------
+// STRICT MONTHLY LEAVE LIMIT CONFIGURATION (MAX 5 DAYS)
+// ----------------------------------------------------
+export const MAX_MONTHLY_LEAVE_DAYS = 5;
+
+/**
+ * Calculates how many days of leave a student has already consumed/requested
+ * in a given calendar month ('YYYY-MM').
+ * Only counts approved and pending leaves (rejected leaves are excluded).
+ */
+export function calculateMonthLeaveDaysUsed(
+  leaves: Array<{ startDate: string; endDate: string; status?: string; approved?: boolean }>,
+  targetMonthStr: string // e.g. '2026-10'
+): number {
+  if (!Array.isArray(leaves) || leaves.length === 0 || !targetMonthStr) return 0;
+  
+  let count = 0;
+  for (const l of leaves) {
+    if (l.status === 'rejected') continue;
+    if (!l.startDate || !l.endDate) continue;
+
+    const s = new Date(l.startDate + 'T00:00:00');
+    const e = new Date(l.endDate + 'T00:00:00');
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) continue;
+
+    const cur = new Date(s);
+    while (cur <= e) {
+      const curMonth = cur.toISOString().split('T')[0].substring(0, 7);
+      if (curMonth === targetMonthStr) {
+        count += 1;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  return count;
+}
+
+/**
+ * Calculates how many days of a proposed leave range fall into a specific calendar month.
+ */
+export function calculateDaysInRangeForMonth(
+  startDateStr: string,
+  endDateStr: string,
+  targetMonthStr: string
+): number {
+  if (!startDateStr || !endDateStr || !targetMonthStr) return 0;
+  const s = new Date(startDateStr + 'T00:00:00');
+  const e = new Date(endDateStr + 'T00:00:00');
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return 0;
+
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const curMonth = cur.toISOString().split('T')[0].substring(0, 7);
+    if (curMonth === targetMonthStr) {
+      count += 1;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+

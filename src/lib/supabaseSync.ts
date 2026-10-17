@@ -1004,17 +1004,32 @@ export async function validateAndRecordStudentAttendance(params: {
       }
     }
 
-    if (determinedShift === 'dinner' && student.planType && student.planType.includes('lunch')) {
+    const planLower = (student.planType || '').toLowerCase();
+    const prefLower = (student.mealPreference || '').toLowerCase();
+
+    const isLunchOnly = prefLower === 'lunch_only' || 
+      planLower === 'monthly_lunch_only' || 
+      planLower === 'lunch_only' || 
+      (planLower.includes('lunch') && !planLower.includes('dinner') && !planLower.includes('2meal'));
+
+    const isDinnerOnly = prefLower === 'dinner_only' || 
+      planLower === 'monthly_dinner_only' || 
+      planLower === 'dinner_only' || 
+      (planLower.includes('dinner') && !planLower.includes('lunch') && !planLower.includes('2meal'));
+
+    const isOneMeal = isLunchOnly || isDinnerOnly || planLower === 'monthly_1meal' || planLower === 'one_meal' || prefLower === 'single';
+
+    if (isLunchOnly && determinedShift === 'dinner') {
       return {
         success: false,
-        message: 'Your subscription is Lunch-Only and does not include Dinner.'
+        message: '⚠️ Pass Restriction: Your subscription is Lunch-Only (फक्त दुपारचे जेवण). Dinner scan is strictly prohibited.'
       };
     }
 
-    if (determinedShift === 'lunch' && student.planType && student.planType.includes('dinner')) {
+    if (isDinnerOnly && determinedShift === 'lunch') {
       return {
         success: false,
-        message: 'Your subscription is Dinner-Only and does not include Lunch.'
+        message: '⚠️ Pass Restriction: Your subscription is Dinner-Only (फक्त रात्रीचे जेवण). Lunch scan is strictly prohibited.'
       };
     }
 
@@ -1032,6 +1047,20 @@ export async function validateAndRecordStudentAttendance(params: {
         success: false,
         message: 'Your attendance for this meal has already been marked today.'
       };
+    }
+
+    if (isOneMeal) {
+      const anyMealTodayLocal = localMeals.find(m =>
+        m.customerId === params.customerId &&
+        m.date === todayStr &&
+        m.scanStatus === 'ALLOW'
+      );
+      if (anyMealTodayLocal) {
+        return {
+          success: false,
+          message: `⚠️ 1-Time Pass Limit: You have already consumed your single meal (${anyMealTodayLocal.mealType.toUpperCase()}) for today.`
+        };
+      }
     }
 
     if (supabase) {

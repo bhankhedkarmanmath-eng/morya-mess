@@ -584,6 +584,38 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                     </span>
                   </div>
 
+                  {/* Authorized Pass & Shift Indicator */}
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">
+                        {scanResult.customer.mealPreference === 'lunch_only' || (scanResult.customer.planType?.toLowerCase().includes('lunch') && !scanResult.customer.planType?.toLowerCase().includes('dinner'))
+                          ? '☀️'
+                          : scanResult.customer.mealPreference === 'dinner_only' || (scanResult.customer.planType?.toLowerCase().includes('dinner') && !scanResult.customer.planType?.toLowerCase().includes('lunch'))
+                            ? '🌙'
+                            : '🍽️'}
+                      </span>
+                      <div>
+                        <span className="font-black text-slate-800 text-[11px] block">
+                          {scanResult.customer.mealPreference === 'lunch_only' || (scanResult.customer.planType?.toLowerCase().includes('lunch') && !scanResult.customer.planType?.toLowerCase().includes('dinner'))
+                            ? '1-Time Pass (Lunch Only • दुपार)'
+                            : scanResult.customer.mealPreference === 'dinner_only' || (scanResult.customer.planType?.toLowerCase().includes('dinner') && !scanResult.customer.planType?.toLowerCase().includes('lunch'))
+                              ? '1-Time Pass (Dinner Only • रात्र)'
+                              : '2-Times Daily Pass (Lunch + Dinner)'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-semibold">
+                          Current Gate Shift: <strong className="uppercase text-orange-600">{activeMealType}</strong>
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                      scanResult.eligibility === 'ALLOW' 
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                        : 'bg-rose-100 text-rose-800 border border-rose-300'
+                    }`}>
+                      {scanResult.eligibility === 'ALLOW' ? 'Authorized Shift' : 'Restricted Shift'}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200 text-[11px]">
                     <div>
                       <span className="text-slate-500 block">Subscription Expiry:</span>

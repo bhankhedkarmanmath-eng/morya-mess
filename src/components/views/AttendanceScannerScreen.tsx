@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 import { Customer, MealLog, BusinessRulesConfig, UserRole, MealType, ScanEligibility } from '../../types/mess';
-import { evaluateStrictMessShift } from '../../lib/storage';
+import { evaluateStrictMessShift, auditCustomerMealScan } from '../../lib/storage';
 import { 
   QrCode, 
   ArrowLeft, 
@@ -54,6 +54,35 @@ export const AttendanceScannerScreen: React.FC<AttendanceScannerScreenProps> = (
   const animationFrameRef = useRef<number | null>(null);
 
   const shiftAudit = evaluateStrictMessShift();
+
+  const playSound = (type: 'success' | 'error') => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'success') {
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } else {
+        osc.frequency.setValueAtTime(220, ctx.currentTime);
+        osc.frequency.setValueAtTime(180, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      }
+    } catch {
+      // Audio blocked or unsupported
+    }
+  };
 
   // Start Camera
   const startCamera = async () => {
@@ -120,34 +149,29 @@ export const AttendanceScannerScreen: React.FC<AttendanceScannerScreenProps> = (
 
   const handleProcessScannedData = (rawText: string) => {
     const trimmed = rawText.trim();
-    // Parse customer ID or phone
-    const matched = customers.find(
-      c => c.id === trimmed || c.phone === trimmed || trimmed.includes(c.id) || trimmed.includes(c.phone)
-    );
+    const currentShift = shiftAudit.mealType || 'lunch';
 
-    if (!matched) {
+    // Authoritative Audit & Strict Shift Integrity Check
+    const auditRes = auditCustomerMealScan(trimmed, currentShift, customers, mealLogs, rules);
+
+    if (auditRes.eligibility === 'BLOCK') {
+      if (soundEnabled) playSound('error');
       setScanResult({
+        customer: auditRes.customer,
         status: 'error',
-        title: 'Unrecognized QR Code',
-        message: `No active member found with token: "${trimmed}". Please register student.`
+        title: 'Access Restricted',
+        message: auditRes.reason
       });
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const currentShift = shiftAudit.mealType || 'lunch';
-
-    // Duplicate verification check
-    const alreadyMarked = mealLogs.some(
-      m => m.customerId === matched.id && m.date === todayStr && m.mealType === currentShift
-    );
-
-    if (alreadyMarked) {
+    const matched = auditRes.customer;
+    if (!matched) {
+      if (soundEnabled) playSound('error');
       setScanResult({
-        customer: matched,
-        status: 'warning',
-        title: 'Already Marked Present',
-        message: `${matched.name} has already scanned for ${currentShift.toUpperCase()} today.`
+        status: 'error',
+        title: 'Unrecognized QR Code',
+        message: auditRes.reason || `No active member found with token: "${trimmed}". Please register student.`
       });
       return;
     }
@@ -155,6 +179,7 @@ export const AttendanceScannerScreen: React.FC<AttendanceScannerScreenProps> = (
     // Record meal attendance
     const res = onRecordMeal(matched.id, currentShift);
     if (res.success) {
+      if (soundEnabled) playSound('success');
       setScanResult({
         customer: matched,
         status: 'success',
@@ -166,6 +191,7 @@ export const AttendanceScannerScreen: React.FC<AttendanceScannerScreenProps> = (
         ...prev.slice(0, 9)
       ]);
     } else {
+      if (soundEnabled) playSound('error');
       setScanResult({
         customer: matched,
         status: 'error',

@@ -349,7 +349,7 @@ export function getTodayActiveSkipsCount(mealType?: 'lunch' | 'dinner'): number 
 
 export interface AttendanceAnomaly {
   id: string;
-  type: 'double_dip' | 'expired_scan' | 'leave_breach' | 'scan_burst';
+  type: 'double_dip' | 'expired_scan' | 'leave_breach' | 'scan_burst' | 'shift_restriction_breach';
   severity: 'high' | 'medium' | 'low';
   studentId: string;
   studentName: string;
@@ -450,6 +450,45 @@ export function runAttendanceIntegrityAudit(
         description: `Student dined at gate while an official approved leave was active (${activeLeave.startDate} to ${activeLeave.endDate}).`,
         resolved: false
       });
+    }
+  }
+
+  // 4. Detect Shift Restriction Breaches (Lunch-Only pass dining at Dinner or vice-versa)
+  for (const log of todayLogs) {
+    const cust = customers.find(c => c.id === log.customerId);
+    if (cust) {
+      const planLower = (cust.planType || '').toLowerCase();
+      const prefLower = (cust.mealPreference || '').toLowerCase();
+      const isLunchOnly = prefLower === 'lunch_only' || planLower === 'monthly_lunch_only' || (planLower.includes('lunch') && !planLower.includes('dinner') && !planLower.includes('2meal'));
+      const isDinnerOnly = prefLower === 'dinner_only' || planLower === 'monthly_dinner_only' || (planLower.includes('dinner') && !planLower.includes('lunch') && !planLower.includes('2meal'));
+
+      if (isLunchOnly && log.mealType === 'dinner') {
+        anomalies.push({
+          id: `ANOM-SHIFT-${log.id}`,
+          type: 'shift_restriction_breach',
+          severity: 'high',
+          studentId: cust.id,
+          studentName: cust.name,
+          date: today,
+          mealType: log.mealType,
+          timestamp: log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : getCurrentTimeString(),
+          description: `Shift Restriction Breach! ${cust.name} is enrolled in a 1-Time LUNCH-ONLY pass, but attendance was logged for DINNER.`,
+          resolved: false
+        });
+      } else if (isDinnerOnly && log.mealType === 'lunch') {
+        anomalies.push({
+          id: `ANOM-SHIFT-${log.id}`,
+          type: 'shift_restriction_breach',
+          severity: 'high',
+          studentId: cust.id,
+          studentName: cust.name,
+          date: today,
+          mealType: log.mealType,
+          timestamp: log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : getCurrentTimeString(),
+          description: `Shift Restriction Breach! ${cust.name} is enrolled in a 1-Time DINNER-ONLY pass, but attendance was logged for LUNCH.`,
+          resolved: false
+        });
+      }
     }
   }
 

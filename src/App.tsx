@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Customer, MealLog, Expense, Worker, CleaningInspection, BusinessRulesConfig, TrialVisitor, UserRole, ScanEligibility, MealType, Gender } from './types/mess';
+import { Customer, MealLog, Expense, Worker, CleaningInspection, BusinessRulesConfig, TrialVisitor, UserRole, ScanEligibility, MealType, Gender, MealPreference } from './types/mess';
 import {
   loadCustomers,
   saveCustomers,
@@ -580,15 +580,19 @@ export function App() {
     newEndDate: string,
     amount: number,
     paidAmount: number,
-    notes?: string
+    notes?: string,
+    planType?: string,
+    mealPreference?: MealPreference
   ) => {
     const updated = customers.map(c => {
       if (c.id !== customerId) return c;
+      const targetPlan = planType || c.planType;
+      const targetPref = mealPreference || c.mealPreference;
       const renewalRecord = {
         id: `rn-${Date.now()}`,
         newStartDate,
         newEndDate,
-        planName: c.planType,
+        planName: targetPlan,
         amount,
         paidAmount,
         date: getTodayString(),
@@ -602,6 +606,8 @@ export function App() {
         startDate: newStartDate,
         endDate: newEndDate,
         status: 'active',
+        planType: targetPlan,
+        mealPreference: targetPref,
         balance: newBalance,
         renewals: [...(c.renewals || []), renewalRecord]
       };
@@ -610,6 +616,7 @@ export function App() {
     });
     setCustomers(updated);
     saveCustomers(updated);
+    pushSyncToServer({ customers: updated });
   };
 
   const handleRecordPayment = (customerId: string, amount: number, mode: 'cash' | 'upi' | 'bank_transfer', notes?: string) => {

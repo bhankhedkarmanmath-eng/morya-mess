@@ -14,7 +14,7 @@ import {
   CustomerComplaint,
   CleanPlateNomination
 } from '../types/mess';
-import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift } from '../lib/storage';
+import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift, MAX_MONTHLY_LEAVE_DAYS, calculateMonthLeaveDaysUsed, calculateDaysInRangeForMonth } from '../lib/storage';
 import { validateAndRecordStudentAttendance } from '../lib/supabaseSync';
 import { 
   fetchMessUpiConfig, 
@@ -3687,6 +3687,39 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <span className="text-[10px] font-mono font-bold bg-slate-800 text-orange-300 px-2.5 py-1 rounded-xl border border-slate-700 uppercase">
               {shiftAudit.mealType}
             </span>
+          </div>
+
+          {/* Pass Shift Status Banner */}
+          <div className={`p-3 rounded-2xl border text-xs flex items-center gap-2.5 ${
+            customer.mealPreference === 'lunch_only' || (customer.planType?.toLowerCase().includes('lunch') && !customer.planType?.toLowerCase().includes('dinner'))
+              ? 'bg-amber-50 border-amber-200 text-amber-950'
+              : customer.mealPreference === 'dinner_only' || (customer.planType?.toLowerCase().includes('dinner') && !customer.planType?.toLowerCase().includes('lunch'))
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-950'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+          }`}>
+            <span className="text-lg">
+              {customer.mealPreference === 'lunch_only' || (customer.planType?.toLowerCase().includes('lunch') && !customer.planType?.toLowerCase().includes('dinner'))
+                ? '☀️'
+                : customer.mealPreference === 'dinner_only' || (customer.planType?.toLowerCase().includes('dinner') && !customer.planType?.toLowerCase().includes('lunch'))
+                  ? '🌙'
+                  : '🍽️'}
+            </span>
+            <div className="flex-1">
+              <span className="font-black block">
+                {customer.mealPreference === 'lunch_only' || (customer.planType?.toLowerCase().includes('lunch') && !customer.planType?.toLowerCase().includes('dinner'))
+                  ? 'Pass Type: 1-Time LUNCH ONLY (फक्त दुपारचे जेवण)'
+                  : customer.mealPreference === 'dinner_only' || (customer.planType?.toLowerCase().includes('dinner') && !customer.planType?.toLowerCase().includes('lunch'))
+                    ? 'Pass Type: 1-Time DINNER ONLY (फक्त रात्रीचे जेवण)'
+                    : 'Pass Type: 2 MEALS DAILY (दोन्ही वेळ: Lunch + Dinner)'}
+              </span>
+              <span className="text-[11px] text-slate-600 block mt-0.5">
+                {customer.mealPreference === 'lunch_only' || (customer.planType?.toLowerCase().includes('lunch') && !customer.planType?.toLowerCase().includes('dinner'))
+                  ? 'Gate scanner permits access during LUNCH only. Dinner scans are strictly blocked.'
+                  : customer.mealPreference === 'dinner_only' || (customer.planType?.toLowerCase().includes('dinner') && !customer.planType?.toLowerCase().includes('lunch'))
+                    ? 'Gate scanner permits access during DINNER only. Lunch scans are strictly blocked.'
+                    : 'Authorized to scan once during Lunch shift and once during Dinner shift daily.'}
+              </span>
+            </div>
           </div>
 
           {/* Hidden Canvas for Frame Processing */}
