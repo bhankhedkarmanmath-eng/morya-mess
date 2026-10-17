@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "lastUpdated": "2026-10-09T06:58:27.279Z",
+  "lastUpdated": "2026-10-17T06:15:44.570Z",
   "customers": [
     {
       "id": "MM-2026-003",
@@ -9,7 +9,7 @@
       "gender": "male",
       "hostelOrAddress": "Kurunda Complex",
       "collegeOrWork": "Engineering College",
-      "planType": "monthly_2meals",
+      "planType": "monthly_dinner_only",
       "totalAmount": 3000,
       "paidAmount": 3000,
       "balance": 0,
@@ -28,11 +28,56 @@
           "recordedBy": "Owner"
         }
       ],
-      "leaves": [],
-      "createdAt": "2026-10-09T06:39:48.482Z"
+      "leaves": [
+        {
+          "id": "lv-1792217744570",
+          "startDate": "2026-10-25",
+          "endDate": "2026-10-26",
+          "days": 2,
+          "reason": "Remaining 2 days",
+          "approved": false,
+          "status": "pending",
+          "createdAt": "2026-10-17T06:15:44.570Z",
+          "requestedAt": "2026-10-17T06:15:44.570Z"
+        },
+        {
+          "id": "lv-1792217734198",
+          "startDate": "2026-10-20",
+          "endDate": "2026-10-22",
+          "days": 3,
+          "reason": "Diwali family visit",
+          "approved": false,
+          "status": "pending",
+          "createdAt": "2026-10-17T06:15:34.198Z",
+          "requestedAt": "2026-10-17T06:15:34.198Z"
+        }
+      ],
+      "createdAt": "2026-10-09T06:39:48.482Z",
+      "mealPreference": "dinner_only"
     }
   ],
-  "mealLogs": [],
+  "mealLogs": [
+    {
+      "id": "ml-1792217330493-aae4",
+      "customerId": "MM-2026-003",
+      "customerName": "Manmath Bhankhedkar",
+      "mealType": "lunch",
+      "date": "2026-10-17",
+      "timestamp": "2026-10-17T06:08:50.493Z",
+      "scanStatus": "ALLOW",
+      "reason": "VERIFIED ALLOWED. Active valid pass until 2026-11-08."
+    },
+    {
+      "id": "ml-1792217326596-y7a3",
+      "customerId": "MM-2026-003",
+      "customerName": "Manmath Bhankhedkar",
+      "mealType": "lunch",
+      "date": "2026-10-17",
+      "timestamp": "2026-10-17T06:08:46.596Z",
+      "scanStatus": "ALLOW",
+      "reason": "VERIFIED ALLOWED. Active valid pass until 2026-11-08."
+    }
+  ],
   "expenses": [],
   "workers": [],
   "cleanings": [],
@@ -90,7 +135,51 @@
   "inventoryItems": [],
   "inventoryMovements": [],
   "inventorySuppliers": [],
-  "notifications": [],
-  "credentials": {},
+  "notifications": [
+    {
+      "id": "notif-1792217744570",
+      "type": "leave_request",
+      "title": "New Student Leave Request",
+      "message": "Manmath Bhankhedkar requested leave from 2026-10-25 to 2026-10-26 (2 days). Reason: Remaining 2 days",
+      "customerId": "MM-2026-003",
+      "customerName": "Manmath Bhankhedkar",
+      "relatedRecordId": "lv-1792217744570",
+      "priority": "high",
+      "isRead": false,
+      "createdAt": "2026-10-17T06:15:44.570Z"
+    },
+    {
+      "id": "notif-1792217734198",
+      "type": "leave_request",
+      "title": "New Student Leave Request",
+      "message": "Manmath Bhankhedkar requested leave from 2026-10-20 to 2026-10-22 (3 days). Reason: Diwali family visit",
+      "customerId": "MM-2026-003",
+      "customerName": "Manmath Bhankhedkar",
+      "relatedRecordId": "lv-1792217734198",
+      "priority": "high",
+      "isRead": false,
+      "createdAt": "2026-10-17T06:15:34.198Z"
+    }
+  ],
+  "credentials": {
+    "bhankhedkarmanmath3@gmail.com": {
+      "id": "usr-1792216730662",
+      "identifier": "bhankhedkarmanmath3@gmail.com",
+      "passwordHash": "d9b77ab7bf26040c50d831b844a6bd7e713774be96abf5f2ee07785c49475069",
+      "role": "owner",
+      "name": "Mess Owner",
+      "mustChangePassword": false,
+      "updatedAt": "2026-10-17T05:59:30.239Z"
+    },
+    "student_mm-2026-003": {
+      "id": "MM-2026-003",
+      "identifier": "7447527804",
+      "passwordHash": "d9b77ab7bf26040c50d831b844a6bd7e713774be96abf5f2ee07785c49475069",
+      "role": "student",
+      "name": "Manmath Bhankhedkar",
+      "mustChangePassword": false,
+      "updatedAt": "2026-10-17T06:12:11.779Z"
+    }
+  },
   "deletedCustomerIds": []
 }

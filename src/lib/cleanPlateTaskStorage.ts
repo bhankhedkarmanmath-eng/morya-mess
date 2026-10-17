@@ -80,8 +80,15 @@ function notifySync(data?: any) {
     } catch {
       // BroadcastChannel not available or error
     }
-    window.dispatchEvent(new CustomEvent('morya_clean_plate_updated', { detail: data }));
-    window.dispatchEvent(new Event('storage'));
+    // Defer DOM events to next macrotask so they never execute synchronously during a React render phase
+    setTimeout(() => {
+      try {
+        window.dispatchEvent(new CustomEvent('morya_clean_plate_updated', { detail: data }));
+        window.dispatchEvent(new Event('storage'));
+      } catch {
+        // ignore
+      }
+    }, 0);
   }
 }
 
@@ -92,7 +99,6 @@ export function loadCampaignConfig(): CampaignConfig {
   try {
     const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (!raw) {
-      saveCampaignConfig(DEFAULT_CAMPAIGN_CONFIG);
       return DEFAULT_CAMPAIGN_CONFIG;
     }
     const parsed = JSON.parse(raw);
@@ -132,9 +138,13 @@ export function loadAllCampaignParticipants(): CampaignParticipant[] {
       return !isMockId && !isMockName;
     });
 
-    // If external mock data was present and filtered out, persist the cleaned list
+    // If external mock data was present and filtered out, persist the cleaned list quietly
     if (filtered.length !== parsed.length) {
-      saveAllCampaignParticipants(filtered);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+      } catch {
+        // ignore
+      }
     }
 
     return filtered;

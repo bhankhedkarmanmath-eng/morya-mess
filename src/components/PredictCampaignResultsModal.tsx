@@ -32,8 +32,11 @@ export const PredictCampaignResultsModal: React.FC<PredictCampaignResultsModalPr
   onClose,
   customers = []
 }) => {
-  const [config, setConfig] = useState<CampaignConfig>(loadCampaignConfig);
-  const [selectedMonth, setSelectedMonth] = useState(config.monthYear || new Date().toISOString().substring(0, 7));
+  const [config, setConfig] = useState<CampaignConfig>(() => loadCampaignConfig());
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const cfg = loadCampaignConfig();
+    return cfg.monthYear || new Date().toISOString().substring(0, 7);
+  });
   const [trackers, setTrackers] = useState<StudentCampaignProgress[]>([]);
   const [isPredicting, setIsPredicting] = useState(false);
   const [predictedWinners, setPredictedWinners] = useState<StudentCampaignProgress[]>([]);

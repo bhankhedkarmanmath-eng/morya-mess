@@ -161,7 +161,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
           onClick={() => setFilter('all')}
           className={`py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
             filter === 'all' 
-              ? 'bg-slate-900 text-white shadow-2xs' 
+              ? 'bg-orange-600 text-white shadow-xs' 
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >

@@ -54,7 +54,7 @@ export const CampaignParticipantsHubModal: React.FC<CampaignParticipantsHubModal
   onClose,
   customers = []
 }) => {
-  const [config, setConfig] = useState<CampaignConfig>(loadCampaignConfig);
+  const [config, setConfig] = useState<CampaignConfig>(() => loadCampaignConfig());
   const [participants, setParticipants] = useState<CampaignParticipant[]>([]);
   const [filterTab, setFilterTab] = useState<'all' | 'qualified' | 'in_progress' | 'winners'>('all');
   const [searchTerm, setSearchTerm] = useState('');

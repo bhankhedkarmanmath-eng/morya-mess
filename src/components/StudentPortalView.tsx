@@ -14,7 +14,7 @@ import {
   CustomerComplaint,
   CleanPlateNomination
 } from '../types/mess';
-import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift, MAX_MONTHLY_LEAVE_DAYS, calculateMonthLeaveDaysUsed, calculateDaysInRangeForMonth } from '../lib/storage';
+import { calculateDaysRemaining, getTodayString, getStandardFee, evaluateStrictMessShift, MAX_MONTHLY_LEAVE_DAYS, calculateMonthLeaveDaysUsed, calculateDaysInRangeForMonth, validateLeaveMonthlyQuota, loadCustomers } from '../lib/storage';
 import { validateAndRecordStudentAttendance } from '../lib/supabaseSync';
 import { 
   fetchMessUpiConfig, 
@@ -294,15 +294,44 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
   // Leave Form State
   const [leaveStart, setLeaveStart] = useState(today);
-  const [leaveEnd, setLeaveEnd] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 3);
-    return d.toISOString().split('T')[0];
-  });
+  const [leaveEnd, setLeaveEnd] = useState(today);
   const [leaveReason, setLeaveReason] = useState('Going to Hometown / Family Function');
   const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
   const [leaveSuccessMessage, setLeaveSuccessMessage] = useState<string | null>(null);
   const [leaveErrorMessage, setLeaveErrorMessage] = useState<string | null>(null);
+
+  // Strict 5-Day Monthly Leave Quota Calculations
+  const leaveTargetMonthStr = useMemo(() => {
+    return (leaveStart || today).substring(0, 7);
+  }, [leaveStart, today]);
+
+  const activeLeavesList = useMemo(() => {
+    return leaveRequests.length > 0 ? leaveRequests : (customer.leaves || []);
+  }, [leaveRequests, customer.leaves]);
+
+  const monthLeaveDaysUsed = useMemo(() => {
+    return calculateMonthLeaveDaysUsed(activeLeavesList, leaveTargetMonthStr);
+  }, [activeLeavesList, leaveTargetMonthStr]);
+
+  const monthLeaveDaysRemaining = useMemo(() => {
+    return Math.max(0, MAX_MONTHLY_LEAVE_DAYS - monthLeaveDaysUsed);
+  }, [monthLeaveDaysUsed]);
+
+  const selectedLeaveDaysCount = useMemo(() => {
+    if (!leaveStart || !leaveEnd || leaveEnd < leaveStart) return 0;
+    return calculateDaysInRangeForMonth(leaveStart, leaveEnd, leaveTargetMonthStr);
+  }, [leaveStart, leaveEnd, leaveTargetMonthStr]);
+
+  const formattedLeaveMonth = useMemo(() => {
+    try {
+      const [year, month] = leaveTargetMonthStr.split('-').map(Number);
+      if (!year || !month) return leaveTargetMonthStr;
+      const d = new Date(year, month - 1, 1);
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } catch {
+      return leaveTargetMonthStr;
+    }
+  }, [leaveTargetMonthStr]);
 
   // UPI Payment Submission State
   const [upiConfig, setUpiConfig] = useState<MessUpiConfig>({
@@ -388,8 +417,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       const leaves = await fetchStudentLeaveRequests(customer.id);
       if (leaves && leaves.length > 0) {
         setLeaveRequests(leaves);
-      } else if (customer.leaves && customer.leaves.length > 0) {
-        setLeaveRequests(customer.leaves);
+      } else {
+        const localCust = loadCustomers().find(c => c.id === customer.id);
+        if (localCust?.leaves && localCust.leaves.length > 0) {
+          setLeaveRequests(localCust.leaves);
+        } else if (customer.leaves && customer.leaves.length > 0) {
+          setLeaveRequests(customer.leaves);
+        }
       }
 
       // 4. Weekly Menu
@@ -957,6 +991,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       return;
     }
 
+    // Strict 5-Day Monthly Leave Limit Check
+    const activeLeaves = leaveRequests.length > 0 ? leaveRequests : (customer.leaves || []);
+    const quotaCheck = validateLeaveMonthlyQuota(activeLeaves, leaveStart, leaveEnd);
+    if (!quotaCheck.allowed) {
+      setLeaveErrorMessage(quotaCheck.error || '⚠️ Monthly leave limit of 5 days exceeded.');
+      return;
+    }
+
     setIsSubmittingLeave(true);
     setLeaveSuccessMessage(null);
     setLeaveErrorMessage(null);
@@ -969,8 +1011,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     });
 
     if (res.success) {
-      setLeaveSuccessMessage('Leave application submitted successfully! Mess Owner has been notified for approval.');
-      onRequestLeave(customer.id, leaveStart, leaveEnd, leaveReason);
+      setLeaveSuccessMessage(`✅ Leave application (${leaveStart} to ${leaveEnd}) submitted successfully! 1 notification sent to the Mess Owner for approval.`);
+      // Update local state without creating duplicate records
+      if (res.data) {
+        setLeaveRequests(prev => [res.data, ...prev.filter(l => l.id !== res.data.id)]);
+      }
       await refreshAllStudentData();
     } else {
       setLeaveErrorMessage(res.error || 'Failed to submit leave request. Please try again.');
@@ -1231,9 +1276,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   }, [statementMonth, validAttendance, payments, leaveRequests, customer.totalAmount, standardFee]);
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 flex flex-col items-center p-2.5 sm:p-5 select-none font-sans">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-b from-orange-50/25 via-slate-50 to-orange-50/15 flex flex-col items-center p-2.5 sm:p-5 select-none font-sans">
       {/* 1. TOP HEADER: LEFT = ☰ MENU, CENTER = MORYA MESS, RIGHT = PROFILE AVATAR */}
-      <header className="w-full max-w-full sm:max-w-2xl bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs p-3 sm:p-4 mb-3 flex items-center justify-between sticky top-2 z-30">
+      <header className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-[0_4px_20px_rgba(234,88,12,0.04)] p-3 sm:p-4 mb-3 flex items-center justify-between sticky top-2 z-30">
         {/* LEFT: ☰ Hamburger Button */}
         <button
           onClick={() => setIsDrawerOpen(true)}
@@ -1568,32 +1613,32 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       )}
 
       {/* 2. STUDENT IDENTITY STRIP */}
-      <div className="w-full max-w-full sm:max-w-2xl mb-3 bg-white p-3 rounded-2xl border border-slate-200 flex items-center justify-between text-xs shadow-2xs">
+      <div className="w-full max-w-full sm:max-w-2xl mb-3 bg-white/95 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs shadow-[0_2px_10px_rgba(234,88,12,0.03)]">
         <div className="flex items-center gap-2 truncate">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
           <span className="text-slate-400 font-medium">Logged in:</span>
           <span className="font-extrabold text-slate-900 truncate">{customer.name}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
-            customer.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
-            customer.status === 'expiring_soon' ? 'bg-amber-100 text-amber-800' :
-            'bg-rose-100 text-rose-800'
+          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border ${
+            customer.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs' :
+            customer.status === 'expiring_soon' ? 'bg-amber-50 text-amber-800 border-amber-200 shadow-2xs' :
+            'bg-rose-50 text-rose-800 border-rose-200 shadow-2xs'
           }`}>
             {customer.status === 'active' ? 'Active Member' : customer.status.replace(/_/g, ' ')}
           </span>
-          <span className="font-mono font-bold text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+          <span className="font-mono font-bold text-[10px] text-orange-800 bg-orange-50/80 px-2.5 py-0.5 rounded-lg border border-orange-200/80">
             {customer.id}
           </span>
         </div>
       </div>
 
       {/* 3. NAVIGATION PILLS BAR (Quick Swipe on Mobile) */}
-      <nav className="w-full max-w-full sm:max-w-2xl bg-white rounded-2xl border border-slate-200 p-1 mb-4 flex items-center justify-between text-xs font-bold text-slate-600 shadow-2xs overflow-x-auto gap-1 scrollbar-none">
+      <nav className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1.5 mb-4 flex items-center justify-between text-xs font-bold text-slate-600 shadow-[0_2px_12px_rgba(234,88,12,0.04)] overflow-x-auto gap-1 scrollbar-none">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'dashboard' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'dashboard' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <span>Dashboard</span>
@@ -1603,8 +1648,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           onClick={() => setActiveTab('scan_counter')}
           className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
             activeTab === 'scan_counter' 
-              ? 'bg-orange-600 text-white shadow-xs font-black' 
-              : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 font-black'
+              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' 
+              : 'bg-orange-50 text-orange-700 hover:bg-orange-100/80 border border-orange-200/80 font-black'
           }`}
         >
           <Camera className="w-3.5 h-3.5 text-orange-600" />
@@ -1613,8 +1658,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('attendance')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'attendance' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'attendance' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <Utensils className="w-3.5 h-3.5" />
@@ -1623,8 +1668,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('pass')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'pass' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'pass' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <span>Pass</span>
@@ -1632,8 +1677,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('leave')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'leave' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'leave' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -1642,9 +1687,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('payments')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'payments' ? 'bg-orange-600 text-white shadow-xs' : 
-            authoritativeBalance > 0 ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'payments' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 
+            authoritativeBalance > 0 ? 'text-rose-600 bg-rose-50 hover:bg-rose-100/80 border border-rose-200' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <CreditCard className="w-3.5 h-3.5" />
@@ -1653,8 +1698,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('statement')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'statement' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'statement' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
@@ -1663,8 +1708,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('menu')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'menu' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'menu' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <Coffee className="w-3.5 h-3.5" />
@@ -1673,8 +1718,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('polls')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'polls' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'polls' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <Vote className="w-3.5 h-3.5" />
@@ -1683,8 +1728,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('ratings')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'ratings' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'ratings' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <Star className="w-3.5 h-3.5" />
@@ -1693,8 +1738,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         <button
           onClick={() => setActiveTab('complaints')}
-          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs ${
-            activeTab === 'complaints' ? 'bg-orange-600 text-white shadow-xs' : 'hover:bg-slate-100 text-slate-700'
+          className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
+            activeTab === 'complaints' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs font-black' : 'hover:bg-orange-50/80 text-slate-700 hover:text-orange-700'
           }`}
         >
           <MessageSquare className="w-3.5 h-3.5" />
@@ -2234,7 +2279,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('pass')}
-                className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-white border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
               >
                 <span>Digital Pass</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -2396,7 +2441,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
               <button
                 onClick={() => setActiveTab('ratings')}
-                className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+                className="py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs shrink-0 cursor-pointer shadow-xs"
               >
                 Rate Meal
               </button>
@@ -2582,7 +2627,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {activeTab === 'pass' && (
         <div className="w-full max-w-full sm:max-w-xl space-y-4">
-          <div className="bg-white rounded-3xl border-2 sm:border-4 border-slate-900 shadow-xl overflow-hidden p-2 text-slate-900">
+          <div className="bg-white rounded-3xl border border-orange-200 shadow-lg overflow-hidden p-2 text-slate-900 ring-4 ring-orange-50/60">
             <div className="border border-amber-500 rounded-2xl p-4 sm:p-5 bg-white relative overflow-hidden">
               {/* Tricolour Ribbon */}
               <div className="h-1.5 w-full -mt-4 sm:-mt-5 mb-4 flex rounded-t overflow-hidden">
@@ -2694,58 +2739,192 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {activeTab === 'leave' && (
         <div className="w-full max-w-full sm:max-w-2xl space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-5">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold">
-                <Calendar className="w-5 h-5" />
+          <div className="bg-white rounded-3xl border border-orange-200/90 p-5 sm:p-7 shadow-[0_8px_30px_rgba(234,88,12,0.08)] space-y-5 relative overflow-hidden">
+            {/* Top Glossy Light Accent Streak */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400" />
+            <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-orange-100/40 blur-2xl pointer-events-none" />
+
+            {/* Light Header Banner */}
+            <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-r from-orange-50/70 via-amber-50/30 to-white border border-orange-200/80 shadow-2xs">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-400 text-white flex items-center justify-center font-bold shadow-sm shadow-orange-500/20 border border-amber-200 shrink-0">
+                <Calendar className="w-6 h-6" />
               </div>
-              <div>
-                <h2 className="font-extrabold text-slate-900 text-base">Request Vacation Leave / Skip Meal</h2>
-                <p className="text-xs text-slate-500">
-                  Approved leaves extend your 30-day subscription automatically!
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-black text-slate-900 text-base sm:text-lg tracking-tight">Apply for Leave & Diet Skip</h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-[10px] uppercase tracking-wide shadow-2xs border border-amber-200">
+                    Official Mess Pass
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium">
+                  Approved leaves automatically extend your active subscription validity
                 </p>
               </div>
             </div>
 
             {leaveSuccessMessage && (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{leaveSuccessMessage}</span>
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex items-center gap-3 shadow-2xs">
+                <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <span className="font-bold">{leaveSuccessMessage}</span>
               </div>
             )}
 
             {leaveErrorMessage && (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{leaveErrorMessage}</span>
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 text-xs flex items-center gap-3 shadow-2xs">
+                <div className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <span className="font-bold">{leaveErrorMessage}</span>
               </div>
             )}
 
+            {/* Monthly Leave Allowance Card (Pristine Light Warm Glow) */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-orange-50/50 via-amber-50/30 to-white border border-orange-200 shadow-2xs space-y-4 relative overflow-hidden">
+              {/* Card Header */}
+              <div className="flex items-start justify-between gap-3 relative z-10">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-slate-900 text-sm sm:text-base">Monthly Leave Allowance</h3>
+                    <span className="px-3 py-1 rounded-xl bg-orange-100 text-orange-800 font-black text-xs border border-orange-200 shadow-2xs">
+                      {formattedLeaveMonth}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium">
+                    Strict quota: Maximum 5 leave days permitted per calendar month
+                  </p>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-xs border ${
+                    monthLeaveDaysRemaining === 0 
+                      ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                      : monthLeaveDaysRemaining <= 2 
+                      ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  }`}>
+                    {monthLeaveDaysRemaining === 0 ? 'Quota Utilized' : `${monthLeaveDaysRemaining} Days Available`}
+                  </span>
+                </div>
+              </div>
+
+              {/* 5 Visual Day Quota Tokens */}
+              <div className="space-y-2 relative z-10">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                  <span>5-Day Allocation Status</span>
+                  <span className="font-extrabold text-orange-700">{monthLeaveDaysUsed} / 5 Days Claimed</span>
+                </span>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map((dayNum) => {
+                    const isUsed = dayNum <= monthLeaveDaysUsed;
+                    return (
+                      <div
+                        key={dayNum}
+                        className={`rounded-2xl p-2.5 text-center flex flex-col items-center justify-center gap-1 transition-all duration-200 border ${
+                          isUsed
+                            ? 'bg-gradient-to-b from-orange-500 to-amber-500 text-white border-orange-300 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-orange-300 shadow-2xs'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                          isUsed ? 'bg-white/25 text-white' : 'bg-orange-50 text-orange-700'
+                        }`}>
+                          {isUsed ? '✓' : dayNum}
+                        </div>
+                        <span className="text-[10px] font-bold leading-none">
+                          {isUsed ? 'Claimed' : `Day ${dayNum}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Light Progress Bar */}
+              <div className="space-y-1.5 relative z-10">
+                <div className="w-full h-2.5 rounded-full bg-orange-100/70 p-0.5 border border-orange-200/60 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 rounded-full ${
+                      monthLeaveDaysUsed >= 5 
+                        ? 'bg-gradient-to-r from-rose-500 to-red-500' 
+                        : monthLeaveDaysUsed >= 4 
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (monthLeaveDaysUsed / 5) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs font-medium text-slate-500 px-0.5">
+                  <span>{monthLeaveDaysUsed} of 5 days utilized</span>
+                  <span className="font-bold text-slate-700">
+                    {monthLeaveDaysRemaining === 0 ? '0 days remaining' : `${monthLeaveDaysRemaining} days remaining`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Contextual Status / Notification */}
+              {monthLeaveDaysRemaining === 0 ? (
+                <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs shadow-2xs flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 font-bold shadow-xs">
+                    <Info className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-amber-950 text-xs">
+                      Monthly allowance completed for {formattedLeaveMonth}
+                    </p>
+                    <p className="text-amber-900/90 text-[11px] leading-relaxed font-medium">
+                      You have utilized all 5 leave days allocated for this month. Your quota will refresh on the 1st of next month. For medical leaves or academic exam extensions, please contact the mess office.
+                    </p>
+                  </div>
+                </div>
+              ) : selectedLeaveDaysCount > 0 ? (
+                <div className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between gap-3 shadow-2xs ${
+                  selectedLeaveDaysCount > monthLeaveDaysRemaining
+                    ? 'bg-rose-50 border-rose-200 text-rose-950'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
+                    <span className="font-semibold">
+                      Selected: <strong>{selectedLeaveDaysCount} {selectedLeaveDaysCount === 1 ? 'day' : 'days'}</strong>
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-right">
+                    {selectedLeaveDaysCount > monthLeaveDaysRemaining
+                      ? `Exceeds allowance by ${selectedLeaveDaysCount - monthLeaveDaysRemaining} ${selectedLeaveDaysCount - monthLeaveDaysRemaining === 1 ? 'day' : 'days'}`
+                      : `${monthLeaveDaysRemaining - selectedLeaveDaysCount} ${monthLeaveDaysRemaining - selectedLeaveDaysCount === 1 ? 'day' : 'days'} will remain`}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
             {isExpired ? (
-              <div className="p-5 sm:p-6 rounded-2xl bg-rose-50 border-2 border-rose-300 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
+              <div className="p-5 sm:p-6 rounded-2xl bg-rose-50/80 border border-rose-200 text-center space-y-3 shadow-2xs">
+                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs border border-rose-200">
                   <AlertCircle className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
                   <h4 className="font-black text-rose-950 text-sm sm:text-base">
-                    Subscription Expired — Leave Applications Blocked
+                    Subscription Expired — Leave Requests Paused
                   </h4>
-                  <p className="text-xs text-rose-800 leading-relaxed max-w-md mx-auto">
-                    Your pass ended on <strong>{customer.endDate || 'N/A'}</strong>. Vacation leave requests, diet skips, and validity extension benefits can strictly only be used while your mess subscription is actively running.
+                  <p className="text-xs text-rose-800 leading-relaxed max-w-md mx-auto font-medium">
+                    Your subscription concluded on <strong>{customer.endDate || 'N/A'}</strong>. Leave requests and validity extensions apply strictly to active memberships.
                   </p>
                 </div>
                 <div className="pt-1">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-200/80 text-rose-900 text-[11px] font-black">
-                    🔒 Please renew your mess pass with owner to apply for leaves
+                  <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-rose-100 text-rose-900 text-xs font-bold border border-rose-200 shadow-2xs">
+                    Please renew your pass with the mess manager to apply for leaves
                   </span>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleLeaveSubmit} className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">
-                      Leave Start Date *
+                    <label className="block font-bold text-slate-800 mb-1.5 text-xs flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-orange-600" />
+                      <span>From Date *</span>
                     </label>
                     <input
                       type="date"
@@ -2753,12 +2932,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                       min={today}
                       value={leaveStart}
                       onChange={e => setLeaveStart(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-bold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">
-                      Leave End Date *
+                    <label className="block font-bold text-slate-800 mb-1.5 text-xs flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-orange-600" />
+                      <span>To Date *</span>
                     </label>
                     <input
                       type="date"
@@ -2766,19 +2946,20 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                       min={leaveStart}
                       value={leaveEnd}
                       onChange={e => setLeaveEnd(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-bold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Reason for Leave *
+                  <label className="block font-bold text-slate-800 mb-1.5 text-xs flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                    <span>Reason for Leave *</span>
                   </label>
                   <select
                     value={leaveReason}
                     onChange={e => setLeaveReason(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800 focus:outline-none focus:border-orange-600"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-semibold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
                   >
                     <option value="Going to Hometown / Family Function">Going to Hometown / Family Function</option>
                     <option value="College Semester Exam Break">College Semester Exam Break</option>
@@ -2788,49 +2969,83 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   </select>
                 </div>
 
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
-                  💡 <strong>Mess Leave Policy:</strong> Please submit leave requests at least 1 day in advance. Once approved by the mess owner, your validity end date is automatically extended.
+                <div className="p-4 rounded-2xl bg-orange-50/70 border border-orange-200/80 text-xs flex items-start gap-3 shadow-2xs text-slate-700">
+                  <div className="w-7 h-7 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <p className="leading-relaxed font-medium">
+                    <strong className="font-bold text-slate-900">Validity Extension Guarantee:</strong> Approved leave days automatically push your subscription expiry date forward by the exact number of days taken, so no meal credits are wasted.
+                  </p>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isSubmittingLeave}
-                  className="w-full py-3 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-50"
+                  disabled={
+                    isSubmittingLeave || 
+                    monthLeaveDaysRemaining === 0 || 
+                    selectedLeaveDaysCount > monthLeaveDaysRemaining
+                  }
+                  className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-md shadow-orange-500/25 active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border border-amber-200"
                 >
                   {isSubmittingLeave ? (
-                    <span>Submitting to Database...</span>
+                    <span>Sending application to Mess Office...</span>
+                  ) : monthLeaveDaysRemaining === 0 ? (
+                    <span>Monthly Quota Completed (5 / 5 Days)</span>
+                  ) : selectedLeaveDaysCount > monthLeaveDaysRemaining ? (
+                    <span>Please Select Up To {monthLeaveDaysRemaining} Days</span>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Submit Leave Request to Mess Manager</span>
+                      <span>Submit Leave Application</span>
                     </>
                   )}
                 </button>
               </form>
             )}
 
-            {/* Live Leave History */}
-            <div className="pt-4 border-t border-slate-100 space-y-3">
-              <h3 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
-                Your Leave Application History ({leaveRequests.length})
-              </h3>
+            {/* Leave History */}
+            <div className="pt-4 border-t border-slate-100 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <span>Your Leave History</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold border border-orange-200">
+                    {leaveRequests.length}
+                  </span>
+                </h3>
+                <span className="text-[11px] font-medium text-slate-400">
+                  Most recent first
+                </span>
+              </div>
+
               {leaveRequests.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No previous leave applications recorded.</p>
+                <div className="py-7 text-center text-xs text-slate-500 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200 font-medium">
+                  No leave applications recorded yet.
+                </div>
               ) : (
-                <div className="divide-y divide-slate-100 text-xs">
+                <div className="space-y-2.5">
                   {leaveRequests.map(l => (
-                    <div key={l.id} className="py-2.5 flex items-center justify-between">
-                      <div>
-                        <span className="font-bold text-slate-800">{l.startDate} to {l.endDate}</span>
-                        <span className="text-[11px] text-slate-500 ml-2">({l.days || 1} days)</span>
-                        <p className="text-[10px] text-slate-400">{l.reason}</p>
+                    <div 
+                      key={l.id} 
+                      className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-orange-200 hover:shadow-xs flex items-center justify-between gap-3 transition-all"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900 text-xs sm:text-sm">{l.startDate} – {l.endDate}</span>
+                          <span className="px-2 py-0.5 rounded-lg bg-orange-50 text-orange-800 font-bold text-xs border border-orange-200">
+                            ({l.days || 1} {Number(l.days) === 1 ? 'day' : 'days'})
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">{l.reason}</p>
                       </div>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        l.status === 'approved' || l.approved ? 'bg-emerald-100 text-emerald-800' :
-                        l.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
-                        'bg-amber-100 text-amber-800'
+
+                      <span className={`px-3 py-1 rounded-xl text-[10px] font-bold tracking-wide uppercase shrink-0 border ${
+                        l.status === 'approved' || l.approved 
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                          : l.status === 'rejected' 
+                          ? 'bg-rose-50 text-rose-800 border-rose-200' 
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {l.status || (l.approved ? 'approved' : 'pending')}
+                        {l.status === 'approved' || l.approved ? 'Approved' : l.status === 'rejected' ? 'Declined' : 'Under Review'}
                       </span>
                     </div>
                   ))}
@@ -2880,20 +3095,22 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* Official Mess UPI Standee Box */}
-            <div className="bg-slate-900 text-white rounded-2xl p-5 text-center space-y-3 relative overflow-hidden shadow-md">
-              <span className="bg-orange-600 text-white text-[10px] font-black tracking-widest uppercase py-1 px-3 rounded-full inline-block">
-                Scan & Pay via PhonePe / GPay / Paytm
+            <div className="bg-gradient-to-br from-orange-50/70 via-white to-amber-50/60 border border-orange-200/90 rounded-3xl p-5 sm:p-6 text-center space-y-4 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400" />
+              
+              <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[10px] font-black tracking-wider uppercase py-1 px-3.5 rounded-full inline-block shadow-2xs">
+                Scan & Pay via PhonePe / GPay / Paytm / BHIM
               </span>
 
               <div>
-                <h3 className="font-black text-base uppercase text-white tracking-tight">
+                <h3 className="font-black text-base sm:text-lg uppercase text-slate-900 tracking-tight">
                   {upiConfig.upiPayeeName || messName}
                 </h3>
-                <p className="text-[11px] text-slate-300 font-medium">Official Mess Payment QR</p>
+                <p className="text-xs text-slate-500 font-medium">Official Mess Payment QR</p>
               </div>
 
               {/* QR Image */}
-              <div className="flex justify-center p-2 bg-white rounded-2xl mx-auto w-fit shadow-lg">
+              <div className="flex justify-center p-3 bg-white rounded-2xl mx-auto w-fit shadow-md border border-orange-100">
                 {upiConfig.upiQrCodeImage ? (
                   <img
                     src={upiConfig.upiQrCodeImage}
@@ -2914,10 +3131,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* UPI ID / VPA with Copy Button */}
-              <div className="bg-slate-800/90 rounded-xl p-2.5 border border-slate-700 flex items-center justify-between text-xs max-w-sm mx-auto">
+              <div className="bg-white rounded-2xl p-2.5 border border-orange-200 shadow-2xs flex items-center justify-between text-xs max-w-sm mx-auto hover:border-orange-300 transition">
                 <div className="text-left truncate mr-2">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Official UPI ID</span>
-                  <span className="font-mono font-bold text-orange-400 text-xs sm:text-sm select-all">
+                  <span className="font-mono font-bold text-orange-600 text-xs sm:text-sm select-all">
                     {upiConfig.upiId}
                   </span>
                 </div>
@@ -2930,9 +3147,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                       setTimeout(() => setCopiedUpi(false), 2000);
                     }
                   }}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-bold flex items-center gap-1 shrink-0 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 text-[11px] font-bold flex items-center gap-1 shrink-0 transition cursor-pointer border border-orange-200/70"
                 >
-                  {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-orange-600" />}
                   <span>{copiedUpi ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
@@ -3261,7 +3478,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
             <button
               onClick={() => window.print()}
-              className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs transition"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-orange-500/20 active:scale-[0.99] transition border border-amber-200"
             >
               <Printer className="w-4 h-4" />
               <span>Print / Download Monthly Statement</span>
@@ -3670,13 +3887,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {activeTab === 'scan_counter' && (
         <div className="w-full max-w-full sm:max-w-xl space-y-4">
           {/* Header Card */}
-          <div className="bg-slate-900 text-white rounded-3xl p-4 sm:p-5 flex items-center justify-between shadow-md">
+          <div className="bg-gradient-to-r from-orange-500 via-orange-600 to-amber-500 text-white rounded-3xl p-4 sm:p-5 flex items-center justify-between shadow-md">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-orange-600 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/30">
                 <Camera className="w-5 h-5 text-white" />
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-orange-400 tracking-wider block">
+                <span className="text-[10px] uppercase font-bold text-orange-100 tracking-wider block">
                   Universal Standee Scanner
                 </span>
                 <h3 className="font-extrabold text-sm sm:text-base tracking-tight text-white">
@@ -3684,7 +3901,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 </h3>
               </div>
             </div>
-            <span className="text-[10px] font-mono font-bold bg-slate-800 text-orange-300 px-2.5 py-1 rounded-xl border border-slate-700 uppercase">
+            <span className="text-[10px] font-mono font-bold bg-white/20 text-white px-2.5 py-1 rounded-xl border border-white/30 uppercase">
               {shiftAudit.mealType}
             </span>
           </div>
@@ -3862,21 +4079,21 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 </div>
 
                 {/* 6. SLEEK HIGH-CONTRAST MEAL & TIME STRIP */}
-                <div className="relative z-10 bg-slate-900 text-white rounded-2xl p-4 flex items-center justify-between shadow-md">
+                <div className="relative z-10 bg-white rounded-2xl p-4 flex items-center justify-between shadow-xs border border-orange-200">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center font-black text-white shadow-xs shrink-0">
                       <Utensils className="w-5 h-5" />
                     </div>
                     <div className="text-left">
-                      <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest block">Meal Verified</span>
-                      <span className="text-base sm:text-lg font-black uppercase text-white tracking-wide">
+                      <span className="text-[10px] font-bold text-orange-600 uppercase tracking-widest block">Meal Verified</span>
+                      <span className="text-base sm:text-lg font-black uppercase text-slate-900 tracking-wide">
                         {scanResult.mealShift || shiftAudit.mealType}
                       </span>
                     </div>
                   </div>
-                  <div className="text-right border-l border-slate-800 pl-4 shrink-0">
+                  <div className="text-right border-l border-slate-100 pl-4 shrink-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Marked Time</span>
-                    <span className="text-base sm:text-lg font-mono font-black text-emerald-400">
+                    <span className="text-base sm:text-lg font-mono font-black text-emerald-600">
                       {scanResult.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -3957,7 +4174,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('dashboard')}
-                    className="flex-1 py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                    className="flex-1 py-3.5 px-4 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer flex items-center justify-center gap-2"
                   >
                     <span>Back to Dashboard</span>
                   </button>
@@ -3969,7 +4186,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           {/* Live Camera Viewport */}
           {!isVerifying && !scanResult && (
             <div className="space-y-4">
-              <div className="relative w-full aspect-square max-w-sm mx-auto bg-black rounded-3xl overflow-hidden border-4 border-slate-900 shadow-2xl flex items-center justify-center">
+              <div className="relative w-full aspect-square max-w-sm mx-auto bg-black rounded-3xl overflow-hidden border-4 border-orange-400/80 shadow-xl flex items-center justify-center ring-4 ring-orange-100">
                 <video
                   ref={videoRef}
                   playsInline

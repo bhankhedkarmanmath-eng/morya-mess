@@ -39,7 +39,7 @@ import {
   saveInventorySuppliers,
   addSecurityLog
 } from './ownerModulesStorage';
-import { loadCustomers, saveCustomers, loadMealLogs, loadTrials, saveTrials, getTodayString, evaluateStrictMessShift, calculateDaysRemaining, MAX_MONTHLY_LEAVE_DAYS, calculateMonthLeaveDaysUsed, calculateDaysInRangeForMonth } from './storage';
+import { loadCustomers, saveCustomers, loadMealLogs, loadTrials, saveTrials, getTodayString, evaluateStrictMessShift, calculateDaysRemaining, MAX_MONTHLY_LEAVE_DAYS, calculateMonthLeaveDaysUsed, calculateDaysInRangeForMonth, validateLeaveMonthlyQuota } from './storage';
 import { pushSyncToServer, syncComplaintToServer, syncRatingToServer } from './syncEngine';
 
 export const DEFAULT_MESS_ID = '63b00e12-a702-492f-bd56-1e260338699f';
@@ -261,9 +261,10 @@ export async function fetchOwnerNotifications(messId: string = DEFAULT_MESS_ID):
 
   // B. Remote Supabase notifications
   remoteNotifs.forEach(n => {
-    // If relatedRecordId already matched a dynamic notification, keep the more specific title/id or merge
+    // If relatedRecordId already matched a dynamic notification, merge into it
     const existing = Array.from(notifMap.values()).find(
-      d => d.relatedRecordId && n.relatedRecordId && d.relatedRecordId === n.relatedRecordId
+      d => (d.relatedRecordId && n.relatedRecordId && d.relatedRecordId === n.relatedRecordId) ||
+           (d.type === n.type && d.customerId && n.customerId && d.customerId === n.customerId && d.title === n.title)
     );
     if (existing) {
       notifMap.set(existing.id, { ...existing, ...n, id: existing.id });
@@ -275,10 +276,11 @@ export async function fetchOwnerNotifications(messId: string = DEFAULT_MESS_ID):
   // C. Local notifications take final precedence for read status and instant user actions
   localNotifs.forEach(n => {
     const existing = notifMap.get(n.id) || Array.from(notifMap.values()).find(
-      d => d.relatedRecordId && n.relatedRecordId && d.relatedRecordId === n.relatedRecordId
+      d => (d.relatedRecordId && n.relatedRecordId && d.relatedRecordId === n.relatedRecordId) ||
+           (d.type === n.type && d.customerId && n.customerId && d.customerId === n.customerId && d.title === n.title)
     );
     if (existing) {
-      notifMap.set(existing.id, { ...existing, ...n });
+      notifMap.set(existing.id, { ...existing, ...n, id: existing.id });
     } else {
       notifMap.set(n.id, n);
     }
@@ -300,7 +302,27 @@ export async function fetchOwnerNotifications(messId: string = DEFAULT_MESS_ID):
     return isMarkedRead !== n.isRead ? { ...n, isRead: true } : n;
   });
 
-  return activeNotifs.sort(
+  // Additional deduplication pass to ensure identical leave requests or actions never appear twice
+  const dedupedList: OwnerNotification[] = [];
+  const seenEventKeys = new Set<string>();
+
+  for (const n of activeNotifs) {
+    const recordKey = n.relatedRecordId ? `${n.type}_${n.customerId || ''}_${n.relatedRecordId}` : null;
+    const contentKey = `${n.type}_${n.customerId || ''}_${(n.message || '').trim().toLowerCase().replace(/\s+/g, ' ')}`;
+    
+    if (recordKey && seenEventKeys.has(recordKey)) {
+      continue;
+    }
+    if (seenEventKeys.has(contentKey)) {
+      continue;
+    }
+
+    if (recordKey) seenEventKeys.add(recordKey);
+    seenEventKeys.add(contentKey);
+    dedupedList.push(n);
+  }
+
+  return dedupedList.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }
@@ -2724,23 +2746,25 @@ export async function submitStudentLeaveRequest(params: {
     }
 
     // Strict 5-Day Monthly Leave Limit Check
-    const targetMonth = params.startDate.substring(0, 7); // e.g. '2026-10'
     const existingLeaves = targetCust.leaves || [];
-    const usedDaysInMonth = calculateMonthLeaveDaysUsed(existingLeaves, targetMonth);
-    const requestedDaysInMonth = calculateDaysInRangeForMonth(params.startDate, params.endDate, targetMonth);
-
-    if (usedDaysInMonth >= MAX_MONTHLY_LEAVE_DAYS) {
+    const quotaValidation = validateLeaveMonthlyQuota(existingLeaves, params.startDate, params.endDate);
+    if (!quotaValidation.allowed) {
       return {
         success: false,
-        error: `⚠️ Monthly Leave Limit Reached: You have already applied for ${usedDaysInMonth} day(s) of leave for this month. The maximum allowed limit is ${MAX_MONTHLY_LEAVE_DAYS} days per month.`
+        error: quotaValidation.error || `⚠️ Monthly leave limit exceeded (Maximum 5 days allowed per month).`
       };
     }
 
-    if (usedDaysInMonth + requestedDaysInMonth > MAX_MONTHLY_LEAVE_DAYS) {
-      const remainingQuota = Math.max(0, MAX_MONTHLY_LEAVE_DAYS - usedDaysInMonth);
+    // Check for duplicate pending/approved request with exact same dates
+    const isDuplicate = existingLeaves.some(l => 
+      l.status !== 'rejected' && 
+      l.startDate === params.startDate && 
+      l.endDate === params.endDate
+    );
+    if (isDuplicate) {
       return {
         success: false,
-        error: `⚠️ Monthly Leave Limit Exceeded: You have already applied for ${usedDaysInMonth} day(s) of leave this month. You have only ${remainingQuota} day(s) remaining (Maximum ${MAX_MONTHLY_LEAVE_DAYS} days per month allowed).`
+        error: '⚠️ Duplicate Leave: You have already submitted a leave request for these dates.'
       };
     }
   }
@@ -2778,6 +2802,23 @@ export async function submitStudentLeaveRequest(params: {
     relatedRecordId: leaveId,
     priority: 'high'
   });
+
+  // Sync to Express backend API quietly
+  try {
+    fetch('/api/sync/leaves', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'request',
+        customerId: params.customerId,
+        leaveId,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        days,
+        reason: params.reason
+      })
+    }).catch(() => {});
+  } catch {}
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('morya_leave_updated'));

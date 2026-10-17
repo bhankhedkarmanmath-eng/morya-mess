@@ -19,7 +19,8 @@ import {
   saveBusinessRules,
   loadTrials,
   saveTrials,
-  getTodayString
+  getTodayString,
+  validateLeaveMonthlyQuota
 } from './lib/storage';
 import {
   syncWithSupabase,
@@ -449,10 +450,15 @@ export function App() {
       channel.addEventListener('message', handleBroadcast);
     }
 
+    const handleLeaveUpdated = () => {
+      reloadNotifs();
+      setCustomers(loadCustomers());
+    };
+
     window.addEventListener('morya_notification_created', handleLocalNotif);
     window.addEventListener('morya_payment_created', reloadNotifs);
     window.addEventListener('morya_complaints_updated', reloadNotifs);
-    window.addEventListener('morya_leave_updated', reloadNotifs);
+    window.addEventListener('morya_leave_updated', handleLeaveUpdated);
     window.addEventListener('storage', reloadNotifs);
 
     // Periodic 5s polling for background cross-device updates
@@ -480,7 +486,7 @@ export function App() {
       window.removeEventListener('morya_notification_created', handleLocalNotif);
       window.removeEventListener('morya_payment_created', reloadNotifs);
       window.removeEventListener('morya_complaints_updated', reloadNotifs);
-      window.removeEventListener('morya_leave_updated', reloadNotifs);
+      window.removeEventListener('morya_leave_updated', handleLeaveUpdated);
       window.removeEventListener('storage', reloadNotifs);
       unsubRealtime();
     };
@@ -762,12 +768,29 @@ export function App() {
   };
 
   const handleRequestLeave = (customerId: string, startDate: string, endDate: string, reason: string) => {
+    const targetCustomer = customers.find(c => c.id === customerId);
+    if (!targetCustomer) return;
+
+    // Strict 5-day monthly quota enforcement
+    const quotaValidation = validateLeaveMonthlyQuota(targetCustomer.leaves || [], startDate, endDate);
+    if (!quotaValidation.allowed) {
+      alert(quotaValidation.error || 'Monthly leave limit of 5 days exceeded.');
+      return;
+    }
+
+    // Check duplicate
+    const isDuplicate = (targetCustomer.leaves || []).some(l => 
+      l.status !== 'rejected' && l.startDate === startDate && l.endDate === endDate
+    );
+    if (isDuplicate) {
+      alert('A leave request for these dates already exists.');
+      return;
+    }
+
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-    const targetCustomer = customers.find(c => c.id === customerId);
     const newLeaveId = `lv-${Date.now()}`;
 
     const updated = customers.map(c => {
@@ -801,7 +824,7 @@ export function App() {
     });
     pushSyncToServer({ customers: updated });
 
-    // Ensure owner notification is created
+    // Ensure owner notification is created with deduplication
     createOwnerNotification({
       type: 'leave_request',
       title: 'Student Leave Request',
@@ -1753,11 +1776,6 @@ export function App() {
               rules={rules}
               onSaveRules={handleSaveRules}
               currentRole={currentRole}
-            />
-
-            <PredictCampaignResultsModal
-              isOpen={isPredictCampaignOpen}
-              onClose={() => setIsPredictCampaignOpen(false)}
             />
 
             <PortalSwitcherModal

@@ -885,6 +885,7 @@ export const MAX_MONTHLY_LEAVE_DAYS = 5;
  * Calculates how many days of leave a student has already consumed/requested
  * in a given calendar month ('YYYY-MM').
  * Only counts approved and pending leaves (rejected leaves are excluded).
+ * Deduplicates overlapping/identical ranges to protect against past duplicate submissions.
  */
 export function calculateMonthLeaveDaysUsed(
   leaves: Array<{ startDate: string; endDate: string; status?: string; approved?: boolean }>,
@@ -893,9 +894,16 @@ export function calculateMonthLeaveDaysUsed(
   if (!Array.isArray(leaves) || leaves.length === 0 || !targetMonthStr) return 0;
   
   let count = 0;
+  const seenRanges = new Set<string>();
+
   for (const l of leaves) {
+    if (!l) continue;
     if (l.status === 'rejected') continue;
     if (!l.startDate || !l.endDate) continue;
+
+    const rangeKey = `${l.startDate}_${l.endDate}`;
+    if (seenRanges.has(rangeKey)) continue;
+    seenRanges.add(rangeKey);
 
     const s = new Date(l.startDate + 'T00:00:00');
     const e = new Date(l.endDate + 'T00:00:00');
@@ -936,5 +944,103 @@ export function calculateDaysInRangeForMonth(
     cur.setDate(cur.getDate() + 1);
   }
   return count;
+}
+
+export interface LeaveQuotaValidationResult {
+  allowed: boolean;
+  error?: string;
+  usedDays: number;
+  requestedDays: number;
+  remainingDays: number;
+  maxDays: number;
+  targetMonth: string;
+}
+
+/**
+ * Validates whether a proposed leave request strictly respects the 5-day limit
+ * across all affected months.
+ */
+export function validateLeaveMonthlyQuota(
+  existingLeaves: Array<{ startDate: string; endDate: string; status?: string; approved?: boolean }>,
+  newStartDate: string,
+  newEndDate: string,
+  maxAllowed: number = MAX_MONTHLY_LEAVE_DAYS
+): LeaveQuotaValidationResult {
+  if (!newStartDate || !newEndDate) {
+    return {
+      allowed: false,
+      error: 'Please select both start and end dates.',
+      usedDays: 0,
+      requestedDays: 0,
+      remainingDays: maxAllowed,
+      maxDays: maxAllowed,
+      targetMonth: ''
+    };
+  }
+
+  const s = new Date(newStartDate + 'T00:00:00');
+  const e = new Date(newEndDate + 'T00:00:00');
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) {
+    return {
+      allowed: false,
+      error: 'End date cannot be earlier than start date.',
+      usedDays: 0,
+      requestedDays: 0,
+      remainingDays: maxAllowed,
+      maxDays: maxAllowed,
+      targetMonth: ''
+    };
+  }
+
+  const touchedMonths = new Set<string>();
+  const cur = new Date(s);
+  while (cur <= e) {
+    touchedMonths.add(cur.toISOString().split('T')[0].substring(0, 7));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  for (const m of touchedMonths) {
+    const used = calculateMonthLeaveDaysUsed(existingLeaves, m);
+    const requested = calculateDaysInRangeForMonth(newStartDate, newEndDate, m);
+    const remaining = Math.max(0, maxAllowed - used);
+
+    if (used >= maxAllowed) {
+      return {
+        allowed: false,
+        error: `⚠️ Monthly Leave Limit Reached: You have already used all ${maxAllowed} leave days for ${m}. You cannot request any more leaves this month.`,
+        usedDays: used,
+        requestedDays: requested,
+        remainingDays: 0,
+        maxDays: maxAllowed,
+        targetMonth: m
+      };
+    }
+
+    if (used + requested > maxAllowed) {
+      return {
+        allowed: false,
+        error: `⚠️ Monthly Leave Limit Exceeded for ${m}: You have already used ${used} days. Only ${remaining} day(s) remaining for this month (Maximum ${maxAllowed} days allowed). You selected ${requested} day(s).`,
+        usedDays: used,
+        requestedDays: requested,
+        remainingDays: remaining,
+        maxDays: maxAllowed,
+        targetMonth: m
+      };
+    }
+  }
+
+  const primaryMonth = newStartDate.substring(0, 7);
+  const primaryUsed = calculateMonthLeaveDaysUsed(existingLeaves, primaryMonth);
+  const primaryRequested = calculateDaysInRangeForMonth(newStartDate, newEndDate, primaryMonth);
+  const primaryRemaining = Math.max(0, maxAllowed - (primaryUsed + primaryRequested));
+
+  return {
+    allowed: true,
+    usedDays: primaryUsed,
+    requestedDays: primaryRequested,
+    remainingDays: primaryRemaining,
+    maxDays: maxAllowed,
+    targetMonth: primaryMonth
+  };
 }
 

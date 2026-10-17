@@ -418,6 +418,63 @@ async function startServer() {
       const leaves = cust.leaves || [];
 
       if (action === 'request') {
+        const sDate = new Date(startDate + 'T00:00:00');
+        const eDate = new Date(endDate + 'T00:00:00');
+        if (isNaN(sDate.getTime()) || isNaN(eDate.getTime()) || sDate > eDate) {
+          return res.status(400).json({ success: false, error: 'Invalid start or end date' });
+        }
+
+        // Strict 5-day monthly quota validation across affected calendar months
+        const touchedMonths = new Set<string>();
+        const curDate = new Date(sDate);
+        while (curDate <= eDate) {
+          touchedMonths.add(curDate.toISOString().split('T')[0].substring(0, 7));
+          curDate.setDate(curDate.getDate() + 1);
+        }
+
+        for (const mStr of touchedMonths) {
+          let usedDays = 0;
+          const seenRanges = new Set<string>();
+          for (const l of leaves) {
+            if (l.status === 'rejected') continue;
+            if (!l.startDate || !l.endDate) continue;
+            const rKey = `${l.startDate}_${l.endDate}`;
+            if (seenRanges.has(rKey)) continue;
+            seenRanges.add(rKey);
+
+            const ls = new Date(l.startDate + 'T00:00:00');
+            const le = new Date(l.endDate + 'T00:00:00');
+            if (isNaN(ls.getTime()) || isNaN(le.getTime()) || ls > le) continue;
+            const c = new Date(ls);
+            while (c <= le) {
+              if (c.toISOString().split('T')[0].substring(0, 7) === mStr) usedDays++;
+              c.setDate(c.getDate() + 1);
+            }
+          }
+
+          let reqDays = 0;
+          const c2 = new Date(sDate);
+          while (c2 <= eDate) {
+            if (c2.toISOString().split('T')[0].substring(0, 7) === mStr) reqDays++;
+            c2.setDate(c2.getDate() + 1);
+          }
+
+          if (usedDays >= 5) {
+            return res.status(400).json({
+              success: false,
+              error: `⚠️ Monthly leave limit reached for ${mStr}. Maximum 5 days allowed per month.`
+            });
+          }
+
+          if (usedDays + reqDays > 5) {
+            const rem = Math.max(0, 5 - usedDays);
+            return res.status(400).json({
+              success: false,
+              error: `⚠️ Monthly leave limit exceeded for ${mStr}. Used: ${usedDays} days, Remaining: ${rem} days (Max 5 days per month allowed).`
+            });
+          }
+        }
+
         const newLeave = {
           id: leaveId || `lv-${Date.now()}`,
           startDate,
@@ -430,22 +487,35 @@ async function startServer() {
           requestedAt: new Date().toISOString()
         };
 
-        cust.leaves = [newLeave, ...leaves];
+        const alreadyExists = leaves.some((l: any) => 
+          l.id === newLeave.id || 
+          (l.startDate === startDate && l.endDate === endDate && l.status !== 'rejected')
+        );
+        if (!alreadyExists) {
+          cust.leaves = [newLeave, ...leaves];
+        }
 
-        // Also add owner notification
-        const notif = {
-          id: `notif-${Date.now()}`,
-          type: 'leave_request',
-          title: 'New Student Leave Request',
-          message: `${cust.name} requested leave from ${startDate} to ${endDate} (${newLeave.days} days). Reason: ${reason}`,
-          customerId: cust.id,
-          customerName: cust.name,
-          relatedRecordId: newLeave.id,
-          priority: 'high',
-          isRead: false,
-          createdAt: new Date().toISOString()
-        };
-        dbMemory.notifications = [notif, ...(dbMemory.notifications || [])];
+        // Deduplicate notification: only create if no recent/matching leave notification exists
+        const notifExists = (dbMemory.notifications || []).some((n: any) => 
+          (n.relatedRecordId && (n.relatedRecordId === newLeave.id || n.relatedRecordId === leaveId)) ||
+          (n.type === 'leave_request' && n.customerId === cust.id && n.message.includes(startDate) && n.message.includes(endDate))
+        );
+
+        if (!notifExists) {
+          const notif = {
+            id: `notif-${Date.now()}`,
+            type: 'leave_request',
+            title: 'New Student Leave Request',
+            message: `${cust.name} requested leave from ${startDate} to ${endDate} (${newLeave.days} days). Reason: ${reason}`,
+            customerId: cust.id,
+            customerName: cust.name,
+            relatedRecordId: newLeave.id,
+            priority: 'high',
+            isRead: false,
+            createdAt: new Date().toISOString()
+          };
+          dbMemory.notifications = [notif, ...(dbMemory.notifications || [])];
+        }
 
         saveDbToDisk();
         return res.json({ success: true, customer: cust, leave: newLeave });
