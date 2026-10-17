@@ -23,6 +23,7 @@ import {
   MessUpiConfig,
   fetchStudentLeaveRequests,
   submitStudentLeaveRequest,
+  cancelStudentLeaveRequest,
   fetchStudentAttendanceLogs,
   fetchWeeklyMenuFromSupabase,
   fetchStudentNotifications,
@@ -118,6 +119,7 @@ import {
   Users,
   ExternalLink,
   Lock,
+  KeyRound,
   Trophy,
   Fingerprint,
   Shield
@@ -179,6 +181,16 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const isExpired = daysRemaining < 0 || customer.status === 'expired' || customer.status === 'inactive';
   const isExpiringSoon = daysRemaining >= 0 && daysRemaining <= 3;
   const standardFee = getStandardFee(customer.gender, customer.planType);
+
+  const formatDateDDMMYYYY = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    const clean = dateStr.split('T')[0];
+    const parts = clean.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`; // DD-MM-YYYY
+    }
+    return dateStr;
+  };
 
   // Active Navigation Tab — Feature 1 Dashboard is Default!
   const [activeTab, setActiveTab] = useState<StudentTab>('dashboard');
@@ -289,7 +301,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // Attendance Dispute & Issue Reporting State (Feature 25)
   const [selectedDisputeLog, setSelectedDisputeLog] = useState<MealLog | null>(null);
   const [disputedLogIds, setDisputedLogIds] = useState<string[]>([]);
+  const [disputeStatusMap, setDisputeStatusMap] = useState<Record<string, string>>({});
   const [attendanceDisputeSuccessMsg, setAttendanceDisputeSuccessMsg] = useState<string | null>(null);
+  const [isCancellingLeave, setIsCancellingLeave] = useState<string | null>(null);
 
   // Initial loading indicator (Feature 26)
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -360,7 +374,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const [generatedUpiQrUrl, setGeneratedUpiQrUrl] = useState('');
   const [payAmount, setPayAmount] = useState(customer.balance > 0 ? String(customer.balance) : String(customer.totalAmount || 2500));
   const [payUtr, setPayUtr] = useState('');
+  const [payDate, setPayDate] = useState(today);
   const [payNotes, setPayNotes] = useState('');
+  const [lastSubmittedPayment, setLastSubmittedPayment] = useState<{ amount: string; utr: string; date: string; notes?: string } | null>(null);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
   const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
@@ -471,15 +487,20 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       const complaintsData = await fetchComplaintsFromSupabase();
       setComplaints(complaintsData);
 
-      // Extract existing attendance dispute log IDs (Feature 25)
-      const existingDisputes = (complaintsData || [])
+      // Extract existing attendance dispute log IDs and status (Feature 25)
+      const disputeMap: Record<string, string> = {};
+      const existingDisputes: string[] = [];
+      (complaintsData || [])
         .filter(c => c.customerId === customer.id && (c.category === 'Attendance Dispute' || c.subject?.includes('Attendance Dispute')))
-        .map(c => {
+        .forEach(c => {
           const match = c.description?.match(/Authoritative Record ID:\s*([^\s\n]+)/);
-          return match ? match[1] : '';
-        })
-        .filter(Boolean);
+          if (match && match[1]) {
+            existingDisputes.push(match[1]);
+            disputeMap[match[1]] = c.status || 'RECEIVED';
+          }
+        });
       setDisputedLogIds(prev => Array.from(new Set([...prev, ...existingDisputes])));
+      setDisputeStatusMap(disputeMap);
 
       // 10. UPI Config
       const upiCfg = await fetchMessUpiConfig();
@@ -645,13 +666,23 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const combinedNotifications = useMemo(() => {
     const list = [...notifications];
 
+    // Helper to check if a similar notification already exists
+    const hasSimilar = (titleFragment: string, msgFragment: string) => {
+      const tf = titleFragment.toLowerCase();
+      const mf = msgFragment.toLowerCase();
+      return list.some(n => 
+        (n.title && n.title.toLowerCase().includes(tf)) ||
+        (n.message && n.message.toLowerCase().includes(mf))
+      );
+    };
+
     // 1. Subscription Expiring soon (Virtual Notification)
     if (!isExpired && isExpiringSoon) {
-      if (!list.some(n => n.id === 'local_sub_expiring')) {
+      if (!list.some(n => n.id === 'local_sub_expiring') && !hasSimilar('Expiring', 'valid till')) {
         list.unshift({
           id: 'local_sub_expiring',
           title: daysRemaining === 0 ? 'Subscription Expires Today!' : 'Subscription Expiring Soon!',
-          message: `Your meal plan is valid till ${customer.endDate}. Only ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left. Renew early to avoid gate scanner interruption.`,
+          message: `Your meal plan is valid till ${formatDateDDMMYYYY(customer.endDate)}. Only ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left. Renew early to avoid gate scanner interruption.`,
           type: 'subscription_expiry',
           is_read: false,
           created_at: new Date().toISOString()
@@ -663,11 +694,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     const approvedLeaves = (customer.leaves || []).filter(l => l.approved || l.status === 'approved');
     const totalApprovedLeaveDays = approvedLeaves.reduce((acc, l) => acc + (l.days || 0), 0);
     if (!isExpired && !isExpiringSoon && totalApprovedLeaveDays > 0) {
-      if (!list.some(n => n.id === 'local_leave_extended')) {
+      if (!list.some(n => n.id === 'local_leave_extended') && !hasSimilar('Validity Extended', 'leave was credited')) {
         list.unshift({
           id: 'local_leave_extended',
           title: `Validity Extended by ${totalApprovedLeaveDays} Day(s)`,
-          message: `Your approved leave was credited. Pass valid until ${customer.endDate} (${daysRemaining} days remaining).`,
+          message: `Your approved leave was credited. Pass valid until ${formatDateDDMMYYYY(customer.endDate)} (${daysRemaining} days remaining).`,
           type: 'leave_extended',
           is_read: false,
           created_at: new Date().toISOString()
@@ -678,11 +709,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     // 3. Pending leave request
     const pendingLeave = leaveRequests.find(l => l.status === 'pending' || (!l.approved && l.status !== 'rejected'));
     if (pendingLeave) {
-      if (!list.some(n => n.id === `local_leave_pending_${pendingLeave.id}`)) {
+      if (!list.some(n => n.id === `local_leave_pending_${pendingLeave.id}`) && !hasSimilar('Leave Request Pending', pendingLeave.startDate)) {
         list.unshift({
           id: `local_leave_pending_${pendingLeave.id}`,
           title: 'Leave Request Pending',
-          message: `Application for ${pendingLeave.startDate} to ${pendingLeave.endDate} (${pendingLeave.days} days) is under Owner review.`,
+          message: `Application for ${formatDateDDMMYYYY(pendingLeave.startDate)} to ${formatDateDDMMYYYY(pendingLeave.endDate)} (${pendingLeave.days} days) is under Owner review.`,
           type: 'leave_pending',
           is_read: false,
           created_at: new Date().toISOString()
@@ -696,11 +727,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       (Date.now() - new Date(latestVerifiedPayment.date || latestVerifiedPayment.createdAt || 0).getTime()) < 5 * 24 * 60 * 60 * 1000
     );
     if (isRecentVerified && latestVerifiedPayment) {
-      if (!list.some(n => n.id === `local_pay_verified_${latestVerifiedPayment.id}`)) {
+      if (!list.some(n => n.id === `local_pay_verified_${latestVerifiedPayment.id}`) && !hasSimilar('Payment Verified', String(latestVerifiedPayment.amount))) {
         list.unshift({
           id: `local_pay_verified_${latestVerifiedPayment.id}`,
           title: 'Recent Payment Verified',
-          message: `Payment of ₹${latestVerifiedPayment.amount} on ${latestVerifiedPayment.date} has been verified and credited by Mess Owner.`,
+          message: `Payment of ₹${latestVerifiedPayment.amount} on ${formatDateDDMMYYYY(latestVerifiedPayment.date)} has been verified and credited by Mess Owner.`,
           type: 'payment_verified',
           is_read: false,
           created_at: new Date().toISOString()
@@ -708,7 +739,23 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       }
     }
 
-    return list;
+    // Deduplicate strictly by ID and content signature
+    const seenIds = new Set<string>();
+    const seenContent = new Set<string>();
+    const deduplicated: any[] = [];
+
+    for (const item of list) {
+      if (!item) continue;
+      const contentKey = `${(item.title || '').trim().toLowerCase()}|${(item.message || '').trim().toLowerCase()}`;
+      if ((item.id && seenIds.has(item.id)) || seenContent.has(contentKey)) {
+        continue;
+      }
+      if (item.id) seenIds.add(item.id);
+      seenContent.add(contentKey);
+      deduplicated.push(item);
+    }
+
+    return deduplicated;
   }, [notifications, isExpired, isExpiringSoon, daysRemaining, customer.endDate, customer.leaves, leaveRequests, payments]);
 
   // =========================================================================
@@ -950,9 +997,39 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     };
   }, [weeklyMenu, menuActiveDay, customer.gender]);
 
-  // =========================================================================
-  // SUBMIT PAYMENT HANDLER (FEATURE 7)
-  // =========================================================================
+  const OWNER_PAYMENT_WHATSAPP_NUMBER = '7447524804';
+  const OWNER_PAYMENT_WHATSAPP_CLEAN = '917447524804';
+
+  const generatePaymentWhatsAppText = useCallback((amount: string, utr: string, date: string, notes?: string) => {
+    return (
+`*MORYA MESS NEW — PAYMENT VERIFICATION REQUEST*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Dear Management,
+I have completed my mess subscription fee payment via UPI. Please verify the transaction details below and credit my account.
+
+*STUDENT INFORMATION:*
+• Name: ${customer.name}
+• Student ID: ${customer.id}
+• Contact: ${customer.phone}
+• Meal Plan: ${customer.planType || 'Standard Plan'}
+
+*TRANSACTION DETAILS:*
+• Amount Paid: ₹${amount}
+• 12-Digit UPI / UTR Ref: ${utr}
+• Payment Date: ${date || today}
+• Payment Mode: Online UPI Transfer
+${notes ? `• Remarks: ${notes}\n` : ''}
+*PROOF OF PAYMENT:*
+• Confirmation screenshot attached with this message
+• Kindly match the 12-digit UTR with your bank / UPI ledger
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Morya Mess New, Perugate, Sadashiv Peth, Pune
+Submitted via Student Portal`
+    );
+  }, [customer, today]);
+
   const handleRecordStudentPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payAmount || Number(payAmount) <= 0) {
@@ -968,27 +1045,84 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     setPaymentSuccessMessage(null);
     setPaymentErrorMessage(null);
 
+    const utrClean = payUtr.trim();
+    const amountClean = payAmount.trim();
+    const dateClean = payDate || today;
+    const notesClean = payNotes.trim();
+
     const res = await recordNewPaymentInSupabase({
       customerId: customer.id,
       customerName: customer.name,
       customerPhone: customer.phone,
-      amount: Number(payAmount),
+      amount: Number(amountClean),
       paymentMode: 'upi',
-      transactionReference: payUtr.trim(),
-      notes: payNotes.trim() ? `Student App: ${payNotes.trim()}` : 'Payment submitted via Student Portal',
+      transactionReference: utrClean,
+      notes: notesClean ? `Student App: ${notesClean}` : 'Payment submitted via Student Portal',
       status: 'pending' // Student payments await owner verification
     });
 
     if (res.success) {
-      setPaymentSuccessMessage(`Payment of ₹${payAmount} submitted successfully! Reference (UTR: ${payUtr}) has been recorded. Status is PENDING verification by Mess Owner.`);
-      setPayUtr('');
-      setPayNotes('');
+      setLastSubmittedPayment({
+        amount: amountClean,
+        utr: utrClean,
+        date: dateClean,
+        notes: notesClean
+      });
+      setPaymentSuccessMessage(`Payment of ₹${amountClean} submitted successfully! Reference (UTR: ${utrClean}) has been recorded in database. You can also send the slip directly to the owner on WhatsApp.`);
       await refreshAllStudentData();
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
     } else {
       setPaymentErrorMessage(res.error || 'Failed to submit payment verification. Please check connection and try again.');
     }
+
     setIsSubmittingPayment(false);
+  };
+
+  const handleSendPaymentOnWhatsApp = async () => {
+    const amountClean = payAmount.trim();
+    const utrClean = payUtr.trim();
+    const dateClean = payDate || today;
+    const notesClean = payNotes.trim();
+
+    if (!amountClean || Number(amountClean) <= 0) {
+      setPaymentErrorMessage('Please enter the Amount Paid (₹) before sending to Owner on WhatsApp.');
+      return;
+    }
+    if (!utrClean) {
+      setPaymentErrorMessage('Please enter the 12-Digit UPI Ref / UTR No. before sending to Owner on WhatsApp.');
+      return;
+    }
+
+    setPaymentErrorMessage(null);
+
+    // Auto-record to database if not already recorded
+    try {
+      await recordNewPaymentInSupabase({
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        amount: Number(amountClean),
+        paymentMode: 'upi',
+        transactionReference: utrClean,
+        notes: notesClean ? `Student App (WhatsApp): ${notesClean}` : 'Payment submitted via Student Portal WhatsApp direct',
+        status: 'pending'
+      });
+      refreshAllStudentData();
+    } catch (e) {
+      console.warn('Auto record on whatsapp submit note:', e);
+    }
+
+    setLastSubmittedPayment({
+      amount: amountClean,
+      utr: utrClean,
+      date: dateClean,
+      notes: notesClean
+    });
+
+    const msg = generatePaymentWhatsAppText(amountClean, utrClean, dateClean, notesClean);
+    const waUrl = `https://wa.me/${OWNER_PAYMENT_WHATSAPP_CLEAN}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+    showStudentToast('Opening WhatsApp... Please remember to attach your payment screenshot before sending!', 'success');
   };
 
   // =========================================================================
@@ -997,7 +1131,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isExpired) {
-      setLeaveErrorMessage(`Cannot apply for leave: Mess subscription expired on ${customer.endDate || 'N/A'}. Please renew your pass with the mess owner first.`);
+      setLeaveErrorMessage(`Cannot apply for leave: Mess subscription expired on ${formatDateDDMMYYYY(customer.endDate)}. Please renew your pass with the mess owner first.`);
       return;
     }
     if (!leaveStart || !leaveEnd) {
@@ -1039,6 +1173,25 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       setLeaveErrorMessage(res.error || 'Failed to submit leave request. Please try again.');
     }
     setIsSubmittingLeave(false);
+  };
+
+  const handleCancelLeave = async (leaveId: string) => {
+    setIsCancellingLeave(leaveId);
+    setLeaveSuccessMessage(null);
+    setLeaveErrorMessage(null);
+    const res = await cancelStudentLeaveRequest({
+      customerId: customer.id,
+      leaveId
+    });
+    setIsCancellingLeave(null);
+    if (res.success) {
+      setLeaveRequests(prev => prev.filter(l => l.id !== leaveId));
+      setLeaveSuccessMessage('Leave application has been withdrawn. Your monthly leave allowance has been restored.');
+      setTimeout(() => setLeaveSuccessMessage(null), 5000);
+      await refreshAllStudentData();
+    } else {
+      setLeaveErrorMessage(res.error || 'Failed to cancel leave request.');
+    }
   };
 
   // =========================================================================
@@ -1228,9 +1381,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const handleProcessScannedCode = async (rawCode: string) => {
     stopCameraStream();
     setIsVerifying(true);
+    const targetMessId = customer.messId || (window as any).__MORYA_MESS_ID__ || '63b00e12-a702-492f-bd56-1e260338699f';
     const res = await validateAndRecordStudentAttendance({
       qrCodeText: rawCode,
-      messId: '63b00e12-a702-492f-bd56-1e260338699f',
+      messId: targetMessId,
       customerId: customer.id,
       customerData: customer
     });
@@ -1292,12 +1446,17 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // =========================================================================
   // MONTHLY STATEMENT DATA PREPARATION (FEATURE 9)
   // =========================================================================
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
+
   const statementData = useMemo(() => {
     const monthMeals = validAttendance.filter(a => a.date.startsWith(statementMonth));
     const monthLunch = monthMeals.filter(a => a.mealType === 'lunch').length;
     const monthDinner = monthMeals.filter(a => a.mealType === 'dinner').length;
     
-    const monthPayments = payments.filter(p => p.createdAt && p.createdAt.startsWith(statementMonth));
+    const monthPayments = payments.filter(p => 
+      (p.date && p.date.startsWith(statementMonth)) || 
+      (p.createdAt && p.createdAt.startsWith(statementMonth))
+    );
     const verifiedMonthPayments = monthPayments.filter(p => p.status === 'verified').reduce((sum, p) => sum + p.amount, 0);
     const pendingMonthPayments = monthPayments.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0);
 
@@ -1309,7 +1468,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       .reduce((sum, l) => sum + (l.days || 1), 0);
 
     const monthlyPlanRate = customer.totalAmount || standardFee;
-    const netBalance = Math.max(0, monthlyPlanRate - verifiedMonthPayments);
+    const isPassFullyPaid = customer.paymentStatus === 'paid' || (customer.balance !== undefined && customer.balance <= 0);
+    const netBalance = isPassFullyPaid && verifiedMonthPayments === 0
+      ? 0
+      : Math.max(0, monthlyPlanRate - verifiedMonthPayments);
 
     return {
       monthStr: statementMonth,
@@ -1321,9 +1483,228 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       monthLunch,
       monthDinner,
       approvedLeaveDays,
-      leaveCount: monthLeaves.length
+      leaveCount: monthLeaves.length,
+      monthPayments,
+      monthMeals
     };
   }, [statementMonth, validAttendance, payments, leaveRequests, customer.totalAmount, standardFee]);
+
+  const formattedStatementMonth = useMemo(() => {
+    try {
+      const [y, m] = statementMonth.split('-');
+      return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } catch {
+      return statementMonth;
+    }
+  }, [statementMonth]);
+
+  const generateStatementHtml = useCallback(() => {
+    const paymentsRows = statementData.monthPayments.length === 0
+      ? '<tr><td colspan="5" style="padding: 12px; text-align: center; color: #64748b; font-style: italic;">No payment records in this billing month. Balance due carried forward.</td></tr>'
+      : statementData.monthPayments.map(p => `
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 12px; font-weight: 700; color: #1e293b;">${p.date || (p.createdAt ? p.createdAt.split('T')[0] : 'N/A')}</td>
+            <td style="padding: 10px 12px; font-weight: 800; color: #047857;">₹${p.amount}</td>
+            <td style="padding: 10px 12px; text-transform: uppercase; font-weight: 600; color: #475569;">${p.paymentMode || 'UPI'}</td>
+            <td style="padding: 10px 12px; font-family: monospace; color: #ea580c; font-weight: 600;">${p.transactionReference || 'Verified'}</td>
+            <td style="padding: 10px 12px; text-align: right; color: #047857; font-weight: 800;">✓ ${p.status || 'verified'}</td>
+          </tr>
+        `).join('');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Morya Mess Monthly Statement - ${customer.name} - ${formattedStatementMonth}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; color: #0f172a; background: #fff; }
+    .voucher { max-width: 720px; margin: 0 auto; border: 2px solid #ea580c; border-radius: 16px; padding: 28px; box-sizing: border-box; }
+    .header { text-align: center; border-bottom: 2px solid #ffedd5; padding-bottom: 16px; margin-bottom: 20px; }
+    .title { font-size: 26px; font-weight: 900; color: #c2410c; margin: 0; }
+    .subtitle { font-size: 13px; color: #475569; margin: 4px 0 0; }
+    .badge { display: inline-block; background: #ea580c; color: #fff; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 8px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; background: #fff7ed; padding: 14px; border-radius: 12px; font-size: 12px; margin-bottom: 20px; border: 1px solid #fed7aa; }
+    .meta-item strong { display: block; color: #9a3412; font-size: 10px; text-transform: uppercase; }
+    .meta-item span { font-weight: 700; color: #0f172a; font-size: 13px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .summary-box { border: 1px solid #fed7aa; border-radius: 10px; padding: 10px; text-align: center; }
+    .summary-box span { display: block; font-size: 10px; text-transform: uppercase; font-weight: 700; color: #64748b; }
+    .summary-box strong { font-size: 16px; font-weight: 900; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+    th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 8px 12px; text-align: left; font-weight: 700; color: #334155; }
+    .attendance-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px; font-size: 12px; margin-bottom: 20px; }
+    .footer { border-top: 1px solid #e2e8f0; padding-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px; color: #64748b; margin-top: 24px; }
+    @media print {
+      body { padding: 0; }
+      .voucher { border: none; padding: 0; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="voucher">
+    <div class="header">
+      <h1 class="title">MORYA MESS NEW</h1>
+      <p class="subtitle">GR5W+9XR, Gopal Gayan Samaj Road, Ramashram Society, Lokamanya Nagar, Perugate, Sadashiv Peth, Pune</p>
+      <p class="subtitle" style="font-size: 11px; margin-top: 2px;">Helpline: +91 87669 17809 (Amit Mundrupakar) &bull; +91 74475 24804 (Ganesh Bhankhedkar)</p>
+      <div class="badge">Official Student Monthly Statement &bull; ${formattedStatementMonth}</div>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-item">
+        <strong>Student Name</strong>
+        <span>${customer.name}</span>
+      </div>
+      <div class="meta-item">
+        <strong>Student / Pass ID</strong>
+        <span style="font-family: monospace;">${customer.id}</span>
+      </div>
+      <div class="meta-item">
+        <strong>Mobile Phone</strong>
+        <span>${customer.phone}</span>
+      </div>
+      <div class="meta-item">
+        <strong>Meal Subscription Plan</strong>
+        <span>${(customer.mealPreference || customer.planType || 'Standard').toUpperCase()}</span>
+      </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-box">
+        <span>Plan Rate</span>
+        <strong style="color: #0f172a;">₹${statementData.monthlyPlanRate}</strong>
+      </div>
+      <div class="summary-box" style="background: #f0fdf4;">
+        <span style="color: #047857;">Verified Paid</span>
+        <strong style="color: #047857;">₹${statementData.verifiedMonthPayments}</strong>
+      </div>
+      <div class="summary-box" style="background: #fffbeb;">
+        <span style="color: #b45309;">Pending UTR</span>
+        <strong style="color: #b45309;">₹${statementData.pendingMonthPayments}</strong>
+      </div>
+      <div class="summary-box" style="background: #fff1f2;">
+        <span style="color: #be123c;">Balance Due</span>
+        <strong style="color: #be123c;">₹${statementData.netBalance}</strong>
+      </div>
+    </div>
+
+    <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin: 0 0 8px;">Payment Transactions (${formattedStatementMonth})</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Mode</th>
+          <th>UTR / Ref</th>
+          <th style="text-align: right;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${paymentsRows}
+      </tbody>
+    </table>
+
+    <div class="attendance-box">
+      <div style="font-weight: 800; font-size: 13px; color: #166534; margin-bottom: 4px;">
+        Dining Attendance & Gate Scans Summary
+      </div>
+      <div style="display: flex; justify-content: space-between; font-weight: 600; color: #15803d;">
+        <span>Total Meals Scanned: <strong>${statementData.totalMeals}</strong></span>
+        <span>Lunch: <strong>${statementData.monthLunch}</strong></span>
+        <span>Dinner: <strong>${statementData.monthDinner}</strong></span>
+        <span>Approved Leave Days: <strong>${statementData.approvedLeaveDays}</strong></span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>
+        <p style="margin: 0; font-weight: 700; color: #0f172a;">Thank you for dining with Morya Mess!</p>
+        <p style="margin: 2px 0 0;">System generated authenticated ledger statement. Valid for hostel/college reimbursement.</p>
+      </div>
+      <div style="text-align: right;">
+        <div style="border-bottom: 1px solid #94a3b8; width: 140px; margin-bottom: 4px;"></div>
+        <span style="font-weight: 700;">Authorized Signatory</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }, [customer, formattedStatementMonth, statementData]);
+
+  const handlePrintStatement = useCallback(() => {
+    try {
+      const html = generateStatementHtml();
+      const printWindow = window.open('', '_blank', 'width=800,height=900');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 300);
+      } else {
+        setIsStatementModalOpen(true);
+        setTimeout(() => window.print(), 300);
+      }
+    } catch {
+      setIsStatementModalOpen(true);
+    }
+  }, [generateStatementHtml]);
+
+  const handleDownloadStatementHtml = useCallback(() => {
+    const html = generateStatementHtml();
+    const cleanName = customer.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Morya_Mess_Statement_${statementMonth}_${cleanName}.html`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showStudentToast('Monthly Statement downloaded successfully!', 'success');
+  }, [generateStatementHtml, customer.name, statementMonth]);
+
+  const handleDownloadStatementCsv = useCallback(() => {
+    const cleanName = customer.name.replace(/[^a-zA-Z0-9]/g, '_');
+    let csv = `MORYA MESS NEW - MONTHLY DINING STATEMENT\n`;
+    csv += `Student Name,${customer.name}\n`;
+    csv += `Student ID,${customer.id}\n`;
+    csv += `Mobile Phone,${customer.phone}\n`;
+    csv += `Billing Cycle,${statementMonth}\n`;
+    csv += `Meal Subscription,${customer.planType || 'Standard'}\n\n`;
+
+    csv += `FINANCIAL SUMMARY\n`;
+    csv += `Monthly Plan Rate,INR ${statementData.monthlyPlanRate}\n`;
+    csv += `Total Verified Paid,INR ${statementData.verifiedMonthPayments}\n`;
+    csv += `Pending Payments,INR ${statementData.pendingMonthPayments}\n`;
+    csv += `Closing Balance Due,INR ${statementData.netBalance}\n\n`;
+
+    csv += `ATTENDANCE BREAKDOWN\n`;
+    csv += `Total Meals Scanned,${statementData.totalMeals}\n`;
+    csv += `Lunch Meals,${statementData.monthLunch}\n`;
+    csv += `Dinner Meals,${statementData.monthDinner}\n`;
+    csv += `Approved Leave Days,${statementData.approvedLeaveDays}\n\n`;
+
+    csv += `PAYMENT TRANSACTIONS\n`;
+    csv += `Date,Amount,Mode,UTR/Ref,Status\n`;
+    statementData.monthPayments.forEach(p => {
+      csv += `${p.date || (p.createdAt ? p.createdAt.split('T')[0] : 'N/A')},${p.amount},${p.paymentMode || 'UPI'},"${p.transactionReference || ''}",${p.status || 'verified'}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Morya_Mess_Statement_${statementMonth}_${cleanName}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showStudentToast('Statement CSV downloaded successfully!', 'success');
+  }, [customer, statementMonth, statementData]);
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-b from-orange-50/25 via-slate-50 to-orange-50/15 flex flex-col items-center p-2.5 sm:p-5 select-none font-sans">
@@ -2284,7 +2665,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   <span>{isExpired ? 'Expired' : `${daysRemaining} Days Remaining`}</span>
                 </span>
                 <span className="text-[10px] text-slate-400 mt-1">
-                  Valid: {customer.startDate || 'N/A'} ➔ {customer.endDate || 'N/A'}
+                  Valid: {formatDateDDMMYYYY(customer.startDate)} ➔ {formatDateDDMMYYYY(customer.endDate)}
                 </span>
               </div>
             </div>
@@ -2645,7 +3026,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-black text-slate-900 capitalize text-sm">{log.mealType} Meal</span>
-                            <span className="font-mono text-[11px] text-slate-500 font-bold">{log.date} at {timeStr}</span>
+                            <span className="font-mono text-[11px] text-slate-500 font-bold">{formatDateDDMMYYYY(log.date)} at {timeStr}</span>
                           </div>
                           <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
                             <span>Method: <strong className="text-slate-700">{methodStr}</strong></span>
@@ -2657,8 +3038,18 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
                       <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                         {isDisputed ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                            Issue Reported
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                            disputeStatusMap[log.id] === 'RESOLVED'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : disputeStatusMap[log.id] === 'IN_PROGRESS'
+                              ? 'bg-blue-100 text-blue-800 border-blue-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          }`}>
+                            {disputeStatusMap[log.id] === 'RESOLVED'
+                              ? '✓ Dispute Resolved'
+                              : disputeStatusMap[log.id] === 'IN_PROGRESS'
+                              ? 'Reviewing by Owner'
+                              : 'Dispute Pending'}
                           </span>
                         ) : (
                           <button
@@ -2777,12 +3168,27 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   OFFICIAL SUBSCRIPTION VALIDITY
                 </span>
                 <div className="font-mono font-black text-sm sm:text-base text-slate-900 flex items-center justify-center gap-2">
-                  <span>{customer.startDate || 'N/A'}</span>
+                  <span>{formatDateDDMMYYYY(customer.startDate)}</span>
                   <span className="text-amber-600 font-sans">➔</span>
-                  <span className={isExpired ? 'text-rose-600' : 'text-orange-700'}>{customer.endDate || 'N/A'}</span>
+                  <span className={isExpired ? 'text-rose-600' : 'text-orange-700'}>{formatDateDDMMYYYY(customer.endDate)}</span>
                 </div>
-                <div className="text-[11px] font-bold text-amber-900 mt-1">
-                  {isExpired ? '⚠️ Subscription Expired' : `${daysRemaining} Days Validity Remaining`}
+                <div className="text-[11px] font-bold text-amber-900 mt-1 flex flex-col items-center gap-1.5">
+                  <span className={isExpired ? 'text-rose-700' : 'text-amber-900'}>
+                    {isExpired ? '⚠️ Subscription Expired' : `${daysRemaining} Days Validity Remaining`}
+                  </span>
+                  {isExpired && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayAmount(String(customer.totalAmount || standardFee || 3000));
+                        setActiveTab('payments');
+                      }}
+                      className="px-4 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1.5 mt-1"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>Renew Pass Online Now &rarr;</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2985,7 +3391,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     Subscription Expired — Leave Requests Paused
                   </h4>
                   <p className="text-xs text-rose-800 leading-relaxed max-w-md mx-auto font-medium">
-                    Your subscription concluded on <strong>{customer.endDate || 'N/A'}</strong>. Leave requests and validity extensions apply strictly to active memberships.
+                    Your subscription concluded on <strong>{formatDateDDMMYYYY(customer.endDate)}</strong>. Leave requests and validity extensions apply strictly to active memberships.
                   </p>
                 </div>
                 <div className="pt-1">
@@ -3106,7 +3512,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-slate-900 text-xs sm:text-sm">{l.startDate} – {l.endDate}</span>
+                          <span className="font-bold text-slate-900 text-xs sm:text-sm">{formatDateDDMMYYYY(l.startDate)} – {formatDateDDMMYYYY(l.endDate)}</span>
                           <span className="px-2 py-0.5 rounded-lg bg-orange-50 text-orange-800 font-bold text-xs border border-orange-200">
                             ({l.days || 1} {Number(l.days) === 1 ? 'day' : 'days'})
                           </span>
@@ -3114,15 +3520,29 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         <p className="text-xs text-slate-500 font-medium">{l.reason}</p>
                       </div>
 
-                      <span className={`px-3 py-1 rounded-xl text-[10px] font-bold tracking-wide uppercase shrink-0 border ${
-                        l.status === 'approved' || l.approved 
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                          : l.status === 'rejected' 
-                          ? 'bg-rose-50 text-rose-800 border-rose-200' 
-                          : 'bg-amber-50 text-amber-800 border-amber-200'
-                      }`}>
-                        {l.status === 'approved' || l.approved ? 'Approved' : l.status === 'rejected' ? 'Declined' : 'Under Review'}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-3 py-1 rounded-xl text-[10px] font-bold tracking-wide uppercase border ${
+                          l.status === 'approved' || l.approved 
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                            : l.status === 'rejected' 
+                            ? 'bg-rose-50 text-rose-800 border-rose-200' 
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {l.status === 'approved' || l.approved ? 'Approved' : l.status === 'rejected' ? 'Declined' : 'Under Review'}
+                        </span>
+
+                        {(l.status === 'pending' || (!l.approved && l.status !== 'rejected')) && (
+                          <button
+                            type="button"
+                            disabled={isCancellingLeave === l.id}
+                            onClick={() => handleCancelLeave(l.id)}
+                            className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-200 transition cursor-pointer disabled:opacity-50"
+                            title="Withdraw this leave request and restore quota"
+                          >
+                            {isCancellingLeave === l.id ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -3239,9 +3659,32 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             )}
             {paymentSuccessMessage && (
-              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{paymentSuccessMessage}</span>
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span className="font-bold leading-relaxed">{paymentSuccessMessage}</span>
+                </div>
+
+                {lastSubmittedPayment && (
+                  <div className="pt-1">
+                    <a
+                      href={`https://wa.me/${OWNER_PAYMENT_WHATSAPP_CLEAN}?text=${encodeURIComponent(
+                        generatePaymentWhatsAppText(
+                          lastSubmittedPayment.amount,
+                          lastSubmittedPayment.utr,
+                          lastSubmittedPayment.date,
+                          lastSubmittedPayment.notes
+                        )
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 py-2 px-3.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs shadow-xs transition cursor-pointer"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-white" />
+                      <span>Send Verification Slip on WhatsApp to Owner (7447524804) &rarr;</span>
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3252,11 +3695,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   Record Your Payment for Owner Verification
                 </h3>
                 <p className="text-[11px] text-slate-500 mb-3">
-                  After paying via your UPI App, enter the amount and 12-digit UTR/Reference number from your bank app.
+                  After paying via your UPI App, enter the amount, 12-digit UTR/Reference number and payment date. You can submit to the database and send the verification code directly to the owner on WhatsApp.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">
                     Amount Paid (₹) *
@@ -3285,6 +3728,19 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     className="w-full px-3 py-2.5 rounded-xl border border-orange-200/80 bg-orange-50/20 font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white"
                   />
                 </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    Payment Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={payDate}
+                    onChange={e => setPayDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-orange-200/80 bg-orange-50/20 font-bold text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white"
+                  />
+                </div>
               </div>
 
               <div>
@@ -3295,25 +3751,53 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   type="text"
                   value={payNotes}
                   onChange={e => setPayNotes(e.target.value)}
-                  placeholder="e.g. Paid for next month / Google Pay"
+                  placeholder="e.g. Paid for next month / Google Pay / PhonePe"
                   className="w-full px-3 py-2 rounded-xl border border-orange-200/80 bg-orange-50/20 text-xs text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white"
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={isSubmittingPayment}
-                className="w-full py-3 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-50"
-              >
-                {isSubmittingPayment ? (
-                  <span>Submitting to Database...</span>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>Submit Payment Verification Request</span>
-                  </>
-                )}
-              </button>
+              {/* Dual Action Buttons: In-App Submit & Direct WhatsApp to Owner */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  type="submit"
+                  disabled={isSubmittingPayment}
+                  className="py-3 px-4 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingPayment ? (
+                    <span>Submitting to Database...</span>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Submit Payment Verification Request</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSendPaymentOnWhatsApp}
+                  className="py-3 px-4 rounded-2xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4 text-white" />
+                  <span>Send to Owner on WhatsApp (7447524804)</span>
+                </button>
+              </div>
+
+              {/* Submission & Verification Instructions - Professional, zero emojis */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-950 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-amber-900 text-xs">
+                  <Info className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                  <span>Important Verification Instructions:</span>
+                </div>
+                <div className="text-[11px] text-amber-800 space-y-1 pl-5 list-disc leading-relaxed">
+                  <p>
+                    <span className="font-semibold text-amber-900">12-Digit Reference:</span> Entry of the UPI Reference / UTR number is required before sending directly to the owner.
+                  </p>
+                  <p>
+                    <span className="font-semibold text-amber-900">Payment Screenshot:</span> When WhatsApp opens, please attach your payment confirmation screenshot showing the UTR and timestamp before sending the message for quick verification.
+                  </p>
+                </div>
+              </div>
             </form>
 
             {/* Payment Transactions & Receipts List */}
@@ -3401,7 +3885,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 Official Digital Receipt
               </span>
               <h3 className="text-lg font-black text-slate-900 uppercase mt-0.5">{messName}</h3>
-              <p className="text-[10px] text-slate-500">Boys & Girls Dining Hall, FC Road, Pune</p>
+              <p className="text-[10px] text-slate-500">Morya Mess New, Perugate, Sadashiv Peth, Pune</p>
             </div>
 
             {/* Receipt Meta */}
@@ -3552,13 +4036,210 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={() => window.print()}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-orange-500/20 active:scale-[0.99] transition border border-amber-200"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print / Download Monthly Statement</span>
-            </button>
+            {/* Monthly Transactions List */}
+            <div className="space-y-2 pt-1">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center justify-between">
+                <span>Fee Payments in {formattedStatementMonth}</span>
+                <span className="font-mono text-[11px] text-slate-500 font-bold">
+                  {statementData.monthPayments.length} Record{statementData.monthPayments.length === 1 ? '' : 's'}
+                </span>
+              </h4>
+
+              {statementData.monthPayments.length === 0 ? (
+                <div className="p-3.5 rounded-2xl bg-orange-50/20 border border-orange-100 text-center text-xs text-slate-500">
+                  No payment transactions recorded for {formattedStatementMonth}.
+                </div>
+              ) : (
+                <div className="divide-y divide-orange-100/80 border border-orange-200/80 rounded-2xl overflow-hidden bg-white text-xs">
+                  {statementData.monthPayments.map((p, idx) => (
+                    <div key={p.id || idx} className="p-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">₹{p.amount}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-orange-100 text-orange-800">
+                            {p.paymentMode || 'UPI'}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-500 block mt-0.5">
+                          {formatDateDDMMYYYY(p.date || (p.createdAt ? p.createdAt.split('T')[0] : 'N/A'))} &bull; Ref: {p.transactionReference || 'Verified'}
+                        </span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        p.status === 'verified'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {p.status === 'verified' ? '✓ Verified' : 'Pending'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Print & Download Action Suite */}
+            <div className="space-y-2.5 pt-2 border-t border-orange-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={handlePrintStatement}
+                  className="py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-orange-600/20 active:scale-[0.99] transition"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Statement Voucher</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadStatementHtml}
+                  className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20 active:scale-[0.99] transition"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Statement (PDF/HTML)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsStatementModalOpen(true)}
+                  className="py-2.5 px-3 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
+                >
+                  <FileText className="w-3.5 h-3.5 text-orange-600" />
+                  <span>Preview Official Voucher</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadStatementCsv}
+                  className="py-2.5 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Download CSV Ledger</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Official Printable Statement Voucher Modal */}
+      {isStatementModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3 sm:p-5 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl border-2 border-orange-500 space-y-5 my-auto max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b-2 border-orange-100 pb-4">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-black tracking-wider text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                  Official Statement Voucher
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  MORYA MESS NEW
+                </h3>
+                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                  GR5W+9XR, Gopal Gayan Samaj Road, Ramashram Society, Lokamanya Nagar, Perugate, Sadashiv Peth, Pune
+                </p>
+                <p className="text-[10px] text-slate-500 font-mono">
+                  Helpline: +91 87669 17809 (Amit Mundrupakar) &bull; +91 74475 24804 (Ganesh Bhankhedkar)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsStatementModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer shrink-0 transition"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Student & Billing Info Box */}
+            <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-orange-50/30 border border-orange-200 text-xs">
+              <div>
+                <span className="text-slate-400 font-bold block text-[10px] uppercase">Student Name:</span>
+                <span className="font-black text-slate-900 text-sm">{customer.name}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold block text-[10px] uppercase">Student ID & Mobile:</span>
+                <span className="font-mono font-bold text-slate-800">{customer.id} &bull; {customer.phone}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold block text-[10px] uppercase">Billing Cycle:</span>
+                <span className="font-bold text-orange-700">{formattedStatementMonth}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold block text-[10px] uppercase">Meal Subscription Plan:</span>
+                <span className="font-bold text-slate-800 uppercase">{(customer.mealPreference || customer.planType || 'Standard').toUpperCase()}</span>
+              </div>
+            </div>
+
+            {/* Financial Totals */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center text-xs">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-500 block uppercase">Plan Rate</span>
+                <span className="text-base font-black text-slate-900">₹{statementData.monthlyPlanRate}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-800 block uppercase">Verified Paid</span>
+                <span className="text-base font-black text-emerald-700">₹{statementData.verifiedMonthPayments}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <span className="text-[10px] font-bold text-amber-800 block uppercase">Pending</span>
+                <span className="text-base font-black text-amber-700">₹{statementData.pendingMonthPayments}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                <span className="text-[10px] font-bold text-rose-800 block uppercase">Balance Due</span>
+                <span className="text-base font-black text-rose-700">₹{statementData.netBalance}</span>
+              </div>
+            </div>
+
+            {/* Attendance & Leave Summary */}
+            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 text-xs space-y-1">
+              <div className="font-bold text-emerald-950 flex items-center justify-between">
+                <span>Gate Attendance & Dining Scans</span>
+                <span className="font-black text-emerald-800">{statementData.totalMeals} Total Meals</span>
+              </div>
+              <div className="flex flex-wrap gap-4 text-emerald-800 text-[11px] pt-1">
+                <span>Lunch Scans: <strong>{statementData.monthLunch}</strong></span>
+                <span>Dinner Scans: <strong>{statementData.monthDinner}</strong></span>
+                <span>Approved Leave Days: <strong>{statementData.approvedLeaveDays}</strong></span>
+              </div>
+            </div>
+
+            {/* Official Certification Stamp */}
+            <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-center text-xs text-slate-700 font-bold flex items-center justify-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>OFFICIAL DIGITAL STATEMENT ISSUED BY MORYA MESS MANAGEMENT</span>
+            </div>
+
+            {/* Actions Inside Modal */}
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handlePrintStatement}
+                className="flex-1 py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Statement</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadStatementHtml}
+                className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download (PDF/HTML)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsStatementModalOpen(false)}
+                className="py-3 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition text-center"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3776,11 +4457,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 </div>
                 <div className="bg-white p-3 rounded-xl border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block uppercase">Start Date</span>
-                  <span className="font-mono font-bold text-slate-900">{customer.startDate || 'N/A'}</span>
+                  <span className="font-mono font-bold text-slate-900">{formatDateDDMMYYYY(customer.startDate)}</span>
                 </div>
                 <div className="bg-white p-3 rounded-xl border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block uppercase">Expiry Date</span>
-                  <span className="font-mono font-bold text-orange-700">{customer.endDate || 'N/A'}</span>
+                  <span className="font-mono font-bold text-orange-700">{formatDateDDMMYYYY(customer.endDate)}</span>
                 </div>
               </div>
             </div>
@@ -3844,6 +4525,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 bg-white focus:outline-hidden focus:border-orange-500"
                       />
                     </div>
+                    <p className="text-[10px] text-amber-700 mt-1">
+                      Note: Your phone number is linked with your mess attendance & payment records. If updating, please notify the mess office.
+                    </p>
                   </div>
 
                   <div>
@@ -4129,10 +4813,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <div className="flex-1">
               <span className="font-black block">
                 {customer.mealPreference === 'lunch_only' || (customer.planType?.toLowerCase().includes('lunch') && !customer.planType?.toLowerCase().includes('dinner'))
-                  ? 'Pass Type: 1-Time LUNCH ONLY (फक्त दुपारचे जेवण)'
+                  ? 'Pass Type: 1-Time LUNCH ONLY'
                   : customer.mealPreference === 'dinner_only' || (customer.planType?.toLowerCase().includes('dinner') && !customer.planType?.toLowerCase().includes('lunch'))
-                    ? 'Pass Type: 1-Time DINNER ONLY (फक्त रात्रीचे जेवण)'
-                    : 'Pass Type: 2 MEALS DAILY (दोन्ही वेळ: Lunch + Dinner)'}
+                    ? 'Pass Type: 1-Time DINNER ONLY'
+                    : 'Pass Type: 2 MEALS DAILY (Lunch + Dinner)'}
               </span>
               <span className="text-[11px] text-slate-600 block mt-0.5">
                 {customer.mealPreference === 'lunch_only' || (customer.planType?.toLowerCase().includes('lunch') && !customer.planType?.toLowerCase().includes('dinner'))

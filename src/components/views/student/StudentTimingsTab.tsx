@@ -73,7 +73,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
                 <Sun className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="font-extrabold text-sm text-slate-900">Lunch Shift (दुपारचे जेवण)</h4>
+                <h4 className="font-extrabold text-sm text-slate-900">Lunch Shift</h4>
                 <span className="text-[10px] text-slate-400 font-medium">Daily Service</span>
               </div>
             </div>
@@ -110,7 +110,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
                 <Moon className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="font-extrabold text-sm text-slate-900">Dinner Shift (संध्याकाळचे जेवण)</h4>
+                <h4 className="font-extrabold text-sm text-slate-900">Dinner Shift</h4>
                 <span className="text-[10px] text-slate-400 font-medium">Mon – Sat</span>
               </div>
             </div>

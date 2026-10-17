@@ -6,7 +6,7 @@ export const StudentRulesFaqTab: React.FC = () => {
 
   const rules = [
     {
-      title: 'Zero Food Wastage (अन्न हे पूर्णब्रह्म)',
+      title: 'Zero Food Wastage (Respect Your Food)',
       desc: 'Take only the portion of rice, sabzi, and dal that you can comfortably finish. Second servings are always available. Respect food and hard work.',
       badge: 'Golden Rule'
     },

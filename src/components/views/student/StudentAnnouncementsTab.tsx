@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MessReminderNotice } from '../../../types/mess';
-import { Bell, AlertTriangle, Info, Calendar, RefreshCw } from 'lucide-react';
+import { Bell, AlertTriangle, Info, Calendar, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface StudentAnnouncementsTabProps {
   reminders: MessReminderNotice[];
@@ -13,7 +13,22 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
   onRefresh,
   isRefreshing = false
 }) => {
-  const activeNotices = reminders.filter(r => r.isActive !== false);
+  // Deduplicate notices by unique ID and title/message
+  const activeNotices = useMemo(() => {
+    const seenIds = new Set<string>();
+    const seenContent = new Set<string>();
+
+    return reminders.filter(r => {
+      if (r.isActive === false) return false;
+      const contentKey = `${(r.title || '').trim().toLowerCase()}|${(r.message || '').trim().toLowerCase()}`;
+      if ((r.id && seenIds.has(r.id)) || seenContent.has(contentKey)) {
+        return false;
+      }
+      if (r.id) seenIds.add(r.id);
+      seenContent.add(contentKey);
+      return true;
+    });
+  }, [reminders]);
 
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
@@ -64,7 +79,6 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
         ) : (
           activeNotices.map((notice, idx) => {
             const isUrgent = notice.priority === 'urgent';
-            const isHigh = notice.priority === 'normal';
 
             return (
               <div
@@ -108,7 +122,10 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
 
                 <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-orange-100">
                   <span className="font-medium">Issued by: Morya Mess Management</span>
-                  <span className="text-emerald-700 font-bold">✓ Official Notice</span>
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>Official Notice</span>
+                  </span>
                 </div>
               </div>
             );

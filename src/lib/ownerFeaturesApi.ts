@@ -2856,6 +2856,44 @@ export async function submitStudentLeaveRequest(params: {
   return { success: true, data: newLeaveRecord };
 }
 
+export async function cancelStudentLeaveRequest(params: {
+  customerId: string;
+  leaveId: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const localCusts = loadCustomers();
+    const targetCust = localCusts.find(c => c.id === params.customerId);
+    if (targetCust) {
+      const updatedLeaves = (targetCust.leaves || []).filter(l => l.id !== params.leaveId);
+      const updatedCusts = localCusts.map(c => 
+        c.id === targetCust.id ? { ...c, leaves: updatedLeaves } : c
+      );
+      saveCustomers(updatedCusts);
+    }
+
+    if (supabase) {
+      try {
+        await supabase
+          .from('leave_requests')
+          .delete()
+          .eq('customer_id', params.customerId)
+          .eq('status', 'pending');
+      } catch (err: any) {
+        console.warn('Supabase remote leave delete warning:', err);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('morya_leave_updated'));
+      window.dispatchEvent(new Event('storage'));
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to cancel leave request' };
+  }
+}
+
 export async function fetchStudentAttendanceLogs(customerId: string): Promise<MealLog[]> {
   if (!supabase || !customerId) return [];
   try {
@@ -3035,23 +3073,24 @@ export async function fetchStudentNotifications(customerId: string): Promise<any
     n => !n.customer_id || n.customer_id === customerId
   );
 
+  const rawList: any[] = [];
+  localNotifs.forEach(n => rawList.push(n));
+
   // Synthesize active notices from loadReminders() as announcements so official notices appear in student inbox
   const notices = loadReminders().filter(r => r.isActive !== false);
-  const noticeNotifs = notices.map(r => ({
-    id: `notice-${r.id}`,
-    mess_id: DEFAULT_MESS_ID,
-    customer_id: null,
-    type: 'announcement',
-    title: r.title,
-    message: r.message,
-    priority: r.priority || 'normal',
-    is_read: readIds.has(`notice-${r.id}`) || readIds.has(r.id),
-    created_at: r.createdAt
-  }));
-
-  const notifMap = new Map<string, any>();
-  noticeNotifs.forEach(n => notifMap.set(n.id, n));
-  localNotifs.forEach(n => notifMap.set(n.id, n));
+  notices.forEach(r => {
+    rawList.push({
+      id: `notice-${r.id}`,
+      mess_id: DEFAULT_MESS_ID,
+      customer_id: null,
+      type: 'announcement',
+      title: r.title,
+      message: r.message,
+      priority: r.priority || 'normal',
+      is_read: readIds.has(`notice-${r.id}`) || readIds.has(r.id),
+      created_at: r.createdAt || new Date().toISOString()
+    });
+  });
 
   if (supabase && customerId) {
     try {
@@ -3064,9 +3103,7 @@ export async function fetchStudentNotifications(customerId: string): Promise<any
 
       if (data && data.length > 0) {
         data.forEach((d: any) => {
-          const local = notifMap.get(d.id);
-          const isRead = local ? local.is_read : (readIds.has(d.id) || (d.is_read ?? false));
-          notifMap.set(d.id, {
+          rawList.push({
             id: d.id,
             mess_id: d.mess_id,
             customer_id: d.customer_id,
@@ -3075,8 +3112,8 @@ export async function fetchStudentNotifications(customerId: string): Promise<any
             title: d.title,
             message: d.message,
             priority: d.priority || 'normal',
-            is_read: isRead,
-            created_at: d.created_at
+            is_read: readIds.has(d.id) || (d.is_read ?? false),
+            created_at: d.created_at || new Date().toISOString()
           });
         });
       }
@@ -3085,19 +3122,35 @@ export async function fetchStudentNotifications(customerId: string): Promise<any
     }
   }
 
-  // Filter out any permanently deleted notifications
-  const activeNotifs = Array.from(notifMap.values()).filter(n => {
-    if (deletedIds.has(n.id)) return false;
-    if (n.id.startsWith('notice-') && deletedIds.has(n.id.replace('notice-', ''))) return false;
-    return true;
-  }).map(n => {
-    const isRead = n.is_read || readIds.has(n.id) || (n.id.startsWith('notice-') && readIds.has(n.id.replace('notice-', '')));
-    return isRead !== n.is_read ? { ...n, is_read: true } : n;
-  });
+  // Deduplicate strictly by ID AND by content signature (title + message)
+  const seenIds = new Set<string>();
+  const seenContent = new Set<string>();
+  const activeNotifs: any[] = [];
 
-  return activeNotifs.sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  // Sort newest first
+  rawList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+  for (const n of rawList) {
+    if (!n) continue;
+    if (deletedIds.has(n.id)) continue;
+    if (n.id.startsWith('notice-') && deletedIds.has(n.id.replace('notice-', ''))) continue;
+
+    const contentKey = `${(n.title || '').trim().toLowerCase()}|${(n.message || '').trim().toLowerCase()}`;
+    if (seenIds.has(n.id) || seenContent.has(contentKey)) {
+      continue;
+    }
+
+    seenIds.add(n.id);
+    seenContent.add(contentKey);
+
+    const isRead = n.is_read || readIds.has(n.id) || (n.id.startsWith('notice-') && readIds.has(n.id.replace('notice-', '')));
+    activeNotifs.push({
+      ...n,
+      is_read: Boolean(isRead)
+    });
+  }
+
+  return activeNotifs;
 }
 
 export async function markNotificationRead(notificationId: string): Promise<boolean> {
@@ -3486,8 +3539,25 @@ export async function fetchAnnouncementsFromSupabase(messId: string = DEFAULT_ME
     if (data?.notes) {
       const parsed = JSON.parse(data.notes);
       if (parsed.reminders && Array.isArray(parsed.reminders)) {
-        saveReminders(parsed.reminders);
-        return parsed.reminders;
+        // Merge and deduplicate by ID and content signature
+        const allNotices = [...parsed.reminders, ...local];
+        const seenIds = new Set<string>();
+        const seenContent = new Set<string>();
+        const deduplicated: MessReminderNotice[] = [];
+
+        allNotices.forEach(r => {
+          if (!r) return;
+          const contentKey = `${(r.title || '').trim().toLowerCase()}|${(r.message || '').trim().toLowerCase()}`;
+          if ((r.id && seenIds.has(r.id)) || seenContent.has(contentKey)) {
+            return;
+          }
+          if (r.id) seenIds.add(r.id);
+          seenContent.add(contentKey);
+          deduplicated.push(r);
+        });
+
+        saveReminders(deduplicated);
+        return deduplicated;
       }
     }
   } catch (e) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Customer } from '../../../types/mess';
 import { 
   markNotificationRead, 
@@ -39,10 +39,27 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
-  const readCount = notifications.filter(n => n.is_read).length;
+  // Strict deduplication of notifications to eliminate duplicate notifications
+  const uniqueNotifications = useMemo(() => {
+    const seenIds = new Set<string>();
+    const seenContent = new Set<string>();
 
-  const filteredNotifications = notifications.filter(n => {
+    return notifications.filter(n => {
+      if (!n) return false;
+      const contentKey = `${(n.title || '').trim().toLowerCase()}|${(n.message || '').trim().toLowerCase()}`;
+      if ((n.id && seenIds.has(n.id)) || seenContent.has(contentKey)) {
+        return false;
+      }
+      if (n.id) seenIds.add(n.id);
+      seenContent.add(contentKey);
+      return true;
+    });
+  }, [notifications]);
+
+  const unreadCount = uniqueNotifications.filter(n => !n.is_read).length;
+  const readCount = uniqueNotifications.filter(n => n.is_read).length;
+
+  const filteredNotifications = uniqueNotifications.filter(n => {
     if (filter === 'unread') return !n.is_read;
     if (filter === 'payment') return n.type?.includes('payment') || n.type?.includes('fee');
     if (filter === 'leave') return n.type?.includes('leave') || n.type?.includes('skip');
@@ -65,7 +82,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
   };
 
   const handleMarkAllRead = async () => {
-    const unread = notifications.filter(n => !n.is_read);
+    const unread = uniqueNotifications.filter(n => !n.is_read);
     for (const item of unread) {
       if (item.id) await markNotificationRead(item.id);
     }
@@ -151,7 +168,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
         <div className="flex items-center gap-2 pt-1 text-xs text-slate-500">
           <span>Unread alerts: <strong className="text-orange-600">{unreadCount}</strong></span>
           <span>•</span>
-          <span>Total: <strong className="text-slate-800">{notifications.length}</strong></span>
+          <span>Total: <strong className="text-slate-800">{uniqueNotifications.length}</strong></span>
         </div>
       </div>
 
@@ -165,7 +182,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
               : 'bg-white border border-orange-200/70 text-slate-600 hover:bg-orange-50/40'
           }`}
         >
-          All ({notifications.length})
+          All ({uniqueNotifications.length})
         </button>
         <button
           onClick={() => setFilter('unread')}

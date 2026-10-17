@@ -72,11 +72,20 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
     setIsSubmitting(true);
     setStatusMessage(null);
 
+    let defaultFeedback = 'Food was good and properly served.';
+    if (ratingScore <= 1) {
+      defaultFeedback = 'Poor experience — food quality or service needs immediate improvement.';
+    } else if (ratingScore === 2) {
+      defaultFeedback = 'Below average — food taste and preparation needs attention.';
+    } else if (ratingScore === 3) {
+      defaultFeedback = 'Average meal — satisfactory.';
+    }
+
     const res = await submitMealRating({
       customerId: customer.id,
       customerName: customer.name,
       rating: ratingScore,
-      feedback: feedbackText.trim() || 'Food was good and properly served.',
+      feedback: feedbackText.trim() || defaultFeedback,
       mealShift: selectedShift,
       date: selectedDate
     });

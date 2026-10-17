@@ -33,14 +33,6 @@ export const StudentComplaintsTab: React.FC<StudentComplaintsTabProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isExpired) {
-      setStatusMessage({
-        type: 'error',
-        text: `Cannot submit: Mess subscription expired on ${customer.endDate || 'N/A'}. Please renew your pass with the owner first.`
-      });
-      return;
-    }
-
     if (!description.trim()) {
       setStatusMessage({ type: 'error', text: 'Please enter details about your complaint or feedback.' });
       return;
@@ -160,27 +152,16 @@ export const StudentComplaintsTab: React.FC<StudentComplaintsTabProps> = ({
           </div>
         )}
 
-        {isExpired ? (
-          <div className="p-5 sm:p-6 rounded-2xl bg-rose-50 border-2 border-rose-300 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="font-black text-rose-950 text-sm sm:text-base">
-                Subscription Expired — Helpdesk Locked
-              </h4>
-              <p className="text-xs text-rose-800 leading-relaxed max-w-md mx-auto">
-                Your mess membership ended on <strong>{customer.endDate || 'N/A'}</strong>. Submitting complaints, hygiene grievances, or service requests is strictly restricted to active diners.
-              </p>
-            </div>
-            <div className="pt-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-200/80 text-rose-900 text-[11px] font-black">
-                🔒 Please renew your mess pass with owner to file complaints
-              </span>
+        {isExpired && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong>Notice:</strong> Your mess membership ended on <strong>{customer.endDate || 'N/A'}</strong>. You can use this helpdesk form to contact management regarding account settlement, deposit refunds, or pass renewal inquiries.
             </div>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="font-bold text-xs text-slate-700 block mb-1">
                 Select Category
@@ -235,8 +216,7 @@ export const StudentComplaintsTab: React.FC<StudentComplaintsTabProps> = ({
               )}
             </button>
           </form>
-        )}
-      </div>
+        </div>
 
       {/* My Complaints List */}
       <div className="space-y-3 pt-2">
