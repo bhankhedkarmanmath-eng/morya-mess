@@ -18,7 +18,7 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
@@ -37,7 +37,7 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            className="p-2 rounded-xl border border-orange-200/80 hover:bg-orange-50 text-slate-600 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
             title="Refresh Notices"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
@@ -52,8 +52,8 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
       {/* Notices List */}
       <div className="space-y-3">
         {activeNotices.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-8 text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-orange-50 border border-orange-200/60 flex items-center justify-center mx-auto text-orange-400">
               <Info className="w-5 h-5" />
             </div>
             <h4 className="font-extrabold text-slate-800 text-xs">No Active Announcements</h4>
@@ -72,7 +72,7 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
                 className={`p-5 rounded-3xl border shadow-2xs space-y-3 ${
                   isUrgent 
                     ? 'bg-rose-50/60 border-rose-200' 
-                    : 'bg-white border-slate-200'
+                    : 'bg-white border-orange-200/80'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -102,11 +102,11 @@ export const StudentAnnouncementsTab: React.FC<StudentAnnouncementsTabProps> = (
                   )}
                 </div>
 
-                <p className="text-xs text-slate-700 leading-relaxed bg-white/70 p-3 rounded-2xl border border-slate-100">
+                <p className="text-xs text-slate-700 leading-relaxed bg-orange-50/20 p-3 rounded-2xl border border-orange-100">
                   {notice.message}
                 </p>
 
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-orange-100">
                   <span className="font-medium">Issued by: Morya Mess Management</span>
                   <span className="text-emerald-700 font-bold">✓ Official Notice</span>
                 </div>

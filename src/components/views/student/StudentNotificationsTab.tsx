@@ -99,7 +99,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
@@ -140,7 +140,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
             <button
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition cursor-pointer"
+              className="p-2 rounded-xl border border-orange-200/80 hover:bg-orange-50 text-slate-600 transition cursor-pointer"
               title="Refresh Notifications"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
@@ -162,7 +162,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
           className={`py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
             filter === 'all' 
               ? 'bg-orange-600 text-white shadow-xs' 
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              : 'bg-white border border-orange-200/70 text-slate-600 hover:bg-orange-50/40'
           }`}
         >
           All ({notifications.length})
@@ -172,7 +172,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
           className={`py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
             filter === 'unread' 
               ? 'bg-orange-600 text-white shadow-xs' 
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              : 'bg-white border border-orange-200/70 text-slate-600 hover:bg-orange-50/40'
           }`}
         >
           Unread ({unreadCount})
@@ -182,7 +182,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
           className={`py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
             filter === 'payment' 
               ? 'bg-emerald-600 text-white shadow-2xs' 
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              : 'bg-white border border-orange-200/70 text-slate-600 hover:bg-orange-50/40'
           }`}
         >
           Payments
@@ -192,7 +192,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
           className={`py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
             filter === 'leave' 
               ? 'bg-indigo-600 text-white shadow-2xs' 
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              : 'bg-white border border-orange-200/70 text-slate-600 hover:bg-orange-50/40'
           }`}
         >
           Leaves
@@ -202,7 +202,7 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
           className={`py-1.5 px-3 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
             filter === 'general' 
               ? 'bg-amber-600 text-white shadow-2xs' 
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              : 'bg-white border border-orange-200/70 text-slate-600 hover:bg-orange-50/40'
           }`}
         >
           General
@@ -212,8 +212,8 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
       {/* Notifications List */}
       <div className="space-y-2.5">
         {filteredNotifications.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-8 text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-orange-50 border border-orange-200/60 flex items-center justify-center mx-auto text-orange-400">
               <Bell className="w-5 h-5" />
             </div>
             <h4 className="font-extrabold text-slate-800 text-xs">No Notifications Found</h4>
@@ -232,14 +232,14 @@ export const StudentNotificationsTab: React.FC<StudentNotificationsTabProps> = (
                 className={`p-4 rounded-2xl border transition shadow-2xs flex items-start gap-3.5 ${
                   isUnread
                     ? 'bg-orange-50/40 border-orange-200'
-                    : 'bg-white border-slate-200 opacity-90'
+                    : 'bg-white border-orange-200/70 opacity-95'
                 }`}
               >
                 {/* Icon Circle */}
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
                   isUnread
                     ? 'bg-white border-orange-300 shadow-2xs'
-                    : 'bg-slate-50 border-slate-200'
+                    : 'bg-orange-50/30 border-orange-200/60'
                 }`}>
                   {getNotificationIcon(notif.type)}
                 </div>

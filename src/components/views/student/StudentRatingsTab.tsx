@@ -98,7 +98,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
@@ -116,7 +116,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            className="p-2 rounded-xl border border-orange-200/80 hover:bg-orange-50 text-slate-600 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
             title="Refresh Ratings"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
@@ -129,7 +129,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
       </div>
 
       {/* Review Submission Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
             <Utensils className="w-4 h-4 text-orange-600" />
@@ -203,7 +203,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
                     className={`py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${
                       selectedShift === 'lunch'
                         ? 'border-orange-500 bg-orange-50 text-orange-800 shadow-2xs'
-                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        : 'border-orange-200/70 bg-white hover:bg-orange-50/50 text-slate-700'
                     }`}
                   >
                     <span>☀️ Lunch</span>
@@ -214,7 +214,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
                     className={`py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${
                       selectedShift === 'dinner'
                         ? 'border-orange-500 bg-orange-50 text-orange-800 shadow-2xs'
-                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        : 'border-orange-200/70 bg-white hover:bg-orange-50/50 text-slate-700'
                     }`}
                   >
                     <span>🌙 Dinner</span>
@@ -229,7 +229,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
                   value={selectedDate}
                   max={today}
                   onChange={e => setSelectedDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-medium text-xs text-slate-800 bg-white focus:outline-hidden focus:border-orange-500"
+                  className="w-full px-3 py-2 rounded-xl border border-orange-200/80 font-medium text-xs text-slate-800 bg-white focus:outline-hidden focus:border-orange-500"
                 />
               </div>
             </div>
@@ -280,7 +280,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
                 onChange={e => setFeedbackText(e.target.value)}
                 rows={3}
                 placeholder="E.g., Sabzi was delicious today! Soft chapatis. Dal salt was balanced."
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-orange-500"
+                className="w-full px-3 py-2.5 rounded-xl border border-orange-200/80 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-orange-500"
               />
             </div>
 
@@ -292,7 +292,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
             >
               {isSubmitting ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   <span>Submitting Review...</span>
                 </>
               ) : (
@@ -317,8 +317,8 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
         </div>
 
         {myRatings.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-8 text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-orange-50 border border-orange-200/60 flex items-center justify-center mx-auto text-orange-400">
               <Utensils className="w-5 h-5" />
             </div>
             <h4 className="font-extrabold text-slate-800 text-xs">No Reviews Submitted Yet</h4>
@@ -331,7 +331,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
             {myRatings.map(rev => (
               <div 
                 key={rev.id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-2"
+                className="bg-white rounded-2xl border border-orange-200/70 p-4 shadow-2xs space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -356,7 +356,7 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-800 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <p className="text-xs text-slate-800 leading-relaxed bg-orange-50/20 p-2.5 rounded-xl border border-orange-100">
                   "{rev.feedback}"
                 </p>
 

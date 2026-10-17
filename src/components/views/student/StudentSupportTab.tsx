@@ -23,7 +23,7 @@ export const StudentSupportTab: React.FC<StudentSupportTabProps> = ({
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
             <HelpCircle className="w-5 h-5" />
@@ -87,14 +87,14 @@ export const StudentSupportTab: React.FC<StudentSupportTabProps> = ({
       </div>
 
       {/* Mess Location & Office Info */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
-        <h3 className="font-extrabold text-sm text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
+        <h3 className="font-extrabold text-sm text-slate-900 border-b border-orange-100 pb-3 flex items-center gap-2">
           <MapPin className="w-4 h-4 text-orange-600" />
           <span>Mess Location & Office Desk</span>
         </h3>
 
         <div className="space-y-3 text-xs">
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-orange-50/25 border border-orange-100">
             <MapPin className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
             <div>
               <strong className="text-slate-900 block font-bold">Physical Address:</strong>
@@ -102,7 +102,7 @@ export const StudentSupportTab: React.FC<StudentSupportTabProps> = ({
             </div>
           </div>
 
-          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+          <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-orange-50/25 border border-orange-100">
             <Clock className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
             <div>
               <strong className="text-slate-900 block font-bold">Office Inquiry Hours:</strong>

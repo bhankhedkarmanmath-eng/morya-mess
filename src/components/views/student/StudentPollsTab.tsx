@@ -51,7 +51,7 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
@@ -69,7 +69,7 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            className="p-2 rounded-xl border border-orange-200/80 hover:bg-orange-50 text-slate-600 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
             title="Refresh Polls"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-orange-600' : ''}`} />
@@ -94,8 +94,8 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
         </div>
 
         {activePolls.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-8 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-orange-50 border border-orange-200/60 flex items-center justify-center mx-auto text-orange-400">
               <Vote className="w-6 h-6" />
             </div>
             <h4 className="font-extrabold text-slate-800 text-sm">No Active Polls Right Now</h4>
@@ -113,7 +113,7 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
             return (
               <div 
                 key={poll.id}
-                className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4"
+                className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4"
               >
                 {/* Poll Header */}
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
@@ -168,17 +168,17 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
                           hasVoted
                             ? isStudentVote
                               ? 'border-emerald-500 bg-emerald-50/50 font-bold text-emerald-950'
-                              : 'border-slate-200 bg-slate-50 text-slate-700'
+                              : 'border-orange-200/70 bg-orange-50/20 text-slate-700'
                             : isSelected
                               ? 'border-orange-500 bg-orange-50 font-bold text-orange-950 cursor-pointer shadow-xs'
-                              : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-800 cursor-pointer'
+                              : 'border-orange-200/70 hover:border-orange-300 bg-white hover:bg-orange-50/40 text-slate-800 cursor-pointer'
                         }`}
                       >
                         {/* Vote Percentage Fill (Visible once voted) */}
                         {hasVoted && (
                           <div 
                             className={`absolute left-0 top-0 bottom-0 pointer-events-none transition-all duration-500 ${
-                              isStudentVote ? 'bg-emerald-200/50' : 'bg-slate-200/40'
+                              isStudentVote ? 'bg-emerald-200/50' : 'bg-orange-100/50'
                             }`}
                             style={{ width: `${pct}%` }}
                           />
@@ -187,7 +187,7 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
                         <div className="relative z-10 flex items-center gap-2.5">
                           {!hasVoted && (
                             <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                              isSelected ? 'border-orange-600 bg-orange-600' : 'border-slate-300 bg-white'
+                              isSelected ? 'border-orange-600 bg-orange-600' : 'border-orange-300 bg-white'
                             }`}>
                               {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                             </div>
@@ -270,10 +270,10 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
           </h3>
           <div className="space-y-3">
             {closedPolls.map(poll => (
-              <div key={poll.id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
+              <div key={poll.id} className="bg-orange-50/20 rounded-2xl border border-orange-200/70 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-700 text-xs">{poll.question}</h4>
-                  <span className="text-[10px] font-bold uppercase bg-slate-200 text-slate-600 px-2 py-0.5 rounded">
+                  <span className="text-[10px] font-bold uppercase bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200/80">
                     Closed
                   </span>
                 </div>
@@ -281,7 +281,7 @@ export const StudentPollsTab: React.FC<StudentPollsTabProps> = ({
                   {poll.options.map(opt => {
                     const pct = poll.totalVotes > 0 ? Math.round((opt.votes / poll.totalVotes) * 100) : 0;
                     return (
-                      <div key={opt.id} className="p-2 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between">
+                      <div key={opt.id} className="p-2 rounded-xl bg-white border border-orange-200/60 text-xs flex items-center justify-between">
                         <span className="text-slate-600">{opt.text}</span>
                         <span className="font-mono font-bold text-slate-500">{pct}% ({opt.votes})</span>
                       </div>

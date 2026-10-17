@@ -123,7 +123,7 @@ export const AutoMealSkipCard: React.FC<AutoMealSkipCardProps> = ({
         <div className={`p-4 rounded-2xl border transition-all ${
           todayLunchSkip 
             ? 'bg-gradient-to-br from-orange-50/70 via-amber-50/40 to-white border-orange-300 shadow-xs' 
-            : 'bg-white border-slate-200/90 hover:border-orange-300 shadow-2xs hover:shadow-xs'
+            : 'bg-white border-orange-200/70 hover:border-orange-300 shadow-2xs hover:shadow-xs'
         }`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
@@ -172,7 +172,7 @@ export const AutoMealSkipCard: React.FC<AutoMealSkipCardProps> = ({
         <div className={`p-4 rounded-2xl border transition-all ${
           todayDinnerSkip 
             ? 'bg-gradient-to-br from-orange-50/70 via-amber-50/40 to-white border-orange-300 shadow-xs' 
-            : 'bg-white border-slate-200/90 hover:border-orange-300 shadow-2xs hover:shadow-xs'
+            : 'bg-white border-orange-200/70 hover:border-orange-300 shadow-2xs hover:shadow-xs'
         }`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">

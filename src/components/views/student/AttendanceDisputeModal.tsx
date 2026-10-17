@@ -83,7 +83,7 @@ export const AttendanceDisputeModal: React.FC<AttendanceDisputeModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl border border-orange-200/90 shadow-2xl max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-orange-600 to-amber-600 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -136,7 +136,7 @@ export const AttendanceDisputeModal: React.FC<AttendanceDisputeModalProps> = ({
           </div>
 
           {/* Authoritative Notice */}
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1">
+          <div className="p-3 rounded-xl bg-orange-50/30 border border-orange-200/70 text-[11px] text-slate-600 space-y-1">
             <p className="font-bold text-slate-800 flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
               Notice on Attendance Records:
@@ -174,7 +174,7 @@ export const AttendanceDisputeModal: React.FC<AttendanceDisputeModalProps> = ({
                       className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
                         selectedReason === reason
                           ? 'bg-orange-50 border-orange-400 text-orange-950 font-bold'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          : 'bg-white border-orange-200/70 text-slate-700 hover:bg-orange-50/30'
                       }`}
                     >
                       <input
@@ -200,7 +200,7 @@ export const AttendanceDisputeModal: React.FC<AttendanceDisputeModalProps> = ({
                   onChange={(e) => setAdditionalNotes(e.target.value)}
                   placeholder="e.g. I was at college lectures from 11 AM to 2 PM on this day..."
                   rows={3}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition bg-slate-50 focus:bg-white resize-none"
+                  className="w-full text-xs p-3 rounded-xl border border-orange-200/80 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition bg-orange-50/20 focus:bg-white resize-none"
                 />
               </div>
 
@@ -210,7 +210,7 @@ export const AttendanceDisputeModal: React.FC<AttendanceDisputeModalProps> = ({
                   type="button"
                   onClick={onClose}
                   disabled={isSubmitting}
-                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-orange-200/80 text-slate-700 font-bold text-xs hover:bg-orange-50/50 transition cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>

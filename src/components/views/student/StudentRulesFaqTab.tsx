@@ -67,7 +67,7 @@ export const StudentRulesFaqTab: React.FC = () => {
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
             <BookOpen className="w-5 h-5" />
@@ -87,7 +87,7 @@ export const StudentRulesFaqTab: React.FC = () => {
       </div>
 
       {/* 6 Golden Rules */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
         <h3 className="font-extrabold text-sm text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-orange-600" />
           <span>Core Mess Rules & Code of Conduct</span>
@@ -97,7 +97,7 @@ export const StudentRulesFaqTab: React.FC = () => {
           {rules.map((rule, idx) => (
             <div
               key={idx}
-              className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-1.5"
+              className="p-4 rounded-2xl border border-orange-200/70 bg-orange-50/20 space-y-1.5"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ export const StudentRulesFaqTab: React.FC = () => {
       </div>
 
       {/* Frequently Asked Questions */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
         <h3 className="font-extrabold text-sm text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
           <HelpCircle className="w-4 h-4 text-orange-600" />
           <span>Frequently Asked Questions (FAQ)</span>
@@ -133,12 +133,12 @@ export const StudentRulesFaqTab: React.FC = () => {
             return (
               <div
                 key={idx}
-                className="border border-slate-200 rounded-2xl overflow-hidden transition"
+                className="border border-orange-200/70 rounded-2xl overflow-hidden transition"
               >
                 <button
                   type="button"
                   onClick={() => setOpenFaq(isOpen ? null : idx)}
-                  className="w-full p-3.5 bg-slate-50 hover:bg-orange-50/50 text-left font-bold text-xs text-slate-800 flex items-center justify-between gap-3 transition cursor-pointer"
+                  className="w-full p-3.5 bg-orange-50/20 hover:bg-orange-50/50 text-left font-bold text-xs text-slate-800 flex items-center justify-between gap-3 transition cursor-pointer"
                 >
                   <span className="leading-snug">{faq.q}</span>
                   {isOpen ? (
@@ -149,7 +149,7 @@ export const StudentRulesFaqTab: React.FC = () => {
                 </button>
 
                 {isOpen && (
-                  <div className="p-3.5 bg-white text-xs text-slate-600 leading-relaxed border-t border-slate-100">
+                  <div className="p-3.5 bg-white text-xs text-slate-600 leading-relaxed border-t border-orange-100">
                     {faq.a}
                   </div>
                 )}

@@ -12,7 +12,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
   return (
     <div className="w-full max-w-full sm:max-w-2xl space-y-4">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-2">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
             <Clock className="w-5 h-5" />
@@ -66,7 +66,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
       {/* Meal Shifts Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {/* Lunch Shift Box */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-2xs space-y-3">
+        <div className="bg-white rounded-3xl border border-orange-200/80 p-5 shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
@@ -82,7 +82,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
             </span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5 text-xs">
+          <div className="p-3.5 rounded-2xl bg-orange-50/20 border border-orange-100 space-y-1.5 text-xs">
             <div className="flex justify-between items-center">
               <span className="text-slate-500 font-medium">Serving Window:</span>
               <strong className="text-slate-900 font-mono text-sm">10:30 AM – 02:30 PM</strong>
@@ -103,7 +103,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
         </div>
 
         {/* Dinner Shift Box */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-2xs space-y-3">
+        <div className="bg-white rounded-3xl border border-orange-200/80 p-5 shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
@@ -119,7 +119,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
             </span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5 text-xs">
+          <div className="p-3.5 rounded-2xl bg-indigo-50/30 border border-indigo-100 space-y-1.5 text-xs">
             <div className="flex justify-between items-center">
               <span className="text-slate-500 font-medium">Serving Window:</span>
               <strong className="text-slate-900 font-mono text-sm">08:30 PM – 10:30 PM</strong>
@@ -156,7 +156,7 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
       </div>
 
       {/* Grace Period & Attendance Rules */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-2xs space-y-3">
+      <div className="bg-white rounded-3xl border border-orange-200/80 p-5 shadow-2xs space-y-3">
         <h4 className="font-extrabold text-xs uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-2">
           Shift Access & Standee Scanner Rules
         </h4>

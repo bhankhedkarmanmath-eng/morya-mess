@@ -1278,11 +1278,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-b from-orange-50/25 via-slate-50 to-orange-50/15 flex flex-col items-center p-2.5 sm:p-5 select-none font-sans">
       {/* 1. TOP HEADER: LEFT = ☰ MENU, CENTER = MORYA MESS, RIGHT = PROFILE AVATAR */}
-      <header className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-[0_4px_20px_rgba(234,88,12,0.04)] p-3 sm:p-4 mb-3 flex items-center justify-between sticky top-2 z-30">
+      <header className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-orange-200/80 shadow-[0_4px_20px_rgba(234,88,12,0.06)] p-3 sm:p-4 mb-3 flex items-center justify-between sticky top-2 z-30">
         {/* LEFT: ☰ Hamburger Button */}
         <button
           onClick={() => setIsDrawerOpen(true)}
-          className="p-2 sm:p-2.5 rounded-xl border border-slate-200 hover:bg-orange-50 hover:border-orange-200 text-slate-800 hover:text-orange-700 transition cursor-pointer flex items-center justify-center shrink-0"
+          className="p-2 sm:p-2.5 rounded-xl border border-orange-200/80 hover:bg-orange-50 hover:border-orange-300 text-slate-800 hover:text-orange-700 transition cursor-pointer flex items-center justify-center shrink-0"
           aria-label="Open Navigation Menu"
           title="Open Menu"
         >
@@ -1309,7 +1309,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           {/* Notification Bell Button (Feature 13) */}
           <button
             onClick={() => setActiveTab('notifications')}
-            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-700 hover:text-orange-700 transition cursor-pointer relative"
+            className="p-2 sm:p-2.5 rounded-xl border border-orange-200/80 hover:border-orange-300 hover:bg-orange-50 text-slate-700 hover:text-orange-700 transition cursor-pointer relative"
             aria-label="View Notifications"
             title="Notifications"
           >
@@ -1324,7 +1324,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           {/* Student Profile Avatar Button (Tapping opens Profile directly!) */}
           <button
             onClick={() => setActiveTab('profile')}
-            className="p-1 sm:p-1.5 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+            className="p-1 sm:p-1.5 rounded-xl border border-orange-200/80 hover:border-orange-300 hover:bg-orange-50 transition cursor-pointer flex items-center gap-1.5 shrink-0"
             aria-label="Open Student Profile"
             title="View My Profile"
           >
@@ -1346,10 +1346,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           />
 
           {/* Drawer Content */}
-          <aside className="relative z-10 w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col justify-between border-r border-slate-200 animate-in slide-in-from-left duration-200">
+          <aside className="relative z-10 w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col justify-between border-r border-orange-200/80 animate-in slide-in-from-left duration-200">
             <div>
               {/* Drawer Header */}
-              <div className="p-4 sm:p-5 border-b border-slate-200 bg-gradient-to-br from-orange-600 to-amber-600 text-white">
+              <div className="p-4 sm:p-5 border-b border-orange-200/80 bg-gradient-to-br from-orange-600 to-amber-600 text-white">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-xl bg-white/20 text-white flex items-center justify-center font-black text-xs">
@@ -1598,7 +1598,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* Drawer Footer: Intro & Log Out */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-2">
+            <div className="p-4 border-t border-orange-200/80 bg-orange-50/20 space-y-2">
 
               <button
                 onClick={() => { setIsDrawerOpen(false); setIsLogoutConfirmOpen(true); }}
@@ -1613,7 +1613,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       )}
 
       {/* 2. STUDENT IDENTITY STRIP */}
-      <div className="w-full max-w-full sm:max-w-2xl mb-3 bg-white/95 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs shadow-[0_2px_10px_rgba(234,88,12,0.03)]">
+      <div className="w-full max-w-full sm:max-w-2xl mb-3 bg-white/95 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-orange-200/80 flex items-center justify-between text-xs shadow-[0_2px_12px_rgba(234,88,12,0.06)]">
         <div className="flex items-center gap-2 truncate">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
           <span className="text-slate-400 font-medium">Logged in:</span>
@@ -1634,7 +1634,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       </div>
 
       {/* 3. NAVIGATION PILLS BAR (Quick Swipe on Mobile) */}
-      <nav className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1.5 mb-4 flex items-center justify-between text-xs font-bold text-slate-600 shadow-[0_2px_12px_rgba(234,88,12,0.04)] overflow-x-auto gap-1 scrollbar-none">
+      <nav className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl border border-orange-200/80 p-1.5 mb-4 flex items-center justify-between text-xs font-bold text-slate-600 shadow-[0_2px_12px_rgba(234,88,12,0.06)] overflow-x-auto gap-1 scrollbar-none">
         <button
           onClick={() => setActiveTab('dashboard')}
           className={`py-2 px-3 rounded-xl transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap text-xs font-bold ${
@@ -1821,7 +1821,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               : 'bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-stone-50 border-amber-300/80 shadow-amber-500/5'
           }`}>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/70">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-orange-200/60">
               <div className="flex items-center gap-3">
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-md shrink-0 ${
                   liveCrowdMeter.colorScheme === 'emerald'
@@ -1855,7 +1855,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-white/90 border border-slate-200 text-[11px] font-bold text-slate-600 shadow-2xs font-mono">
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-white/90 border border-orange-200/70 text-[11px] font-bold text-slate-600 shadow-2xs font-mono">
                   <Clock className="w-3.5 h-3.5 text-slate-400" />
                   <span>25-Min Auto Refresh</span>
                 </span>
@@ -1893,7 +1893,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* Live Occupancy Gauge Bar */}
-            <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
+            <div className="p-3.5 rounded-2xl bg-white border border-orange-200/80 shadow-2xs space-y-2">
               <div className="flex items-center justify-between text-xs font-bold">
                 <span className="text-slate-700 flex items-center gap-1.5">
                   <span>⚡ Dining Hall Capacity:</span>
@@ -1910,7 +1910,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Visual Multi-step Bar */}
-              <div className="h-3 rounded-full bg-slate-100 overflow-hidden border border-slate-200/80 p-0.5 flex">
+              <div className="h-3 rounded-full bg-slate-100 overflow-hidden border border-orange-200/70 p-0.5 flex">
                 <div 
                   className={`h-full rounded-full transition-all duration-700 ${
                     liveCrowdMeter.occupancy <= 35
@@ -1931,7 +1931,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* 20-Seat Visual Grid (Chairs Floor Plan) */}
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-3">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-orange-200/80 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
                   <span>🪑 Hall Layout (20 Dining Chairs)</span>
@@ -2182,8 +2182,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           </div>
 
           {/* Member Profile Overview Card */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-100 pb-4">
               <div>
                 <span className="text-[10px] uppercase font-bold text-orange-600 tracking-wider block">
                   Student Member
@@ -2227,7 +2227,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Metric 2: Month Meals */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+              <div className="p-3.5 rounded-2xl bg-orange-50/25 border border-orange-200/70">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">This Month</span>
                 <div className="font-black text-slate-900 text-base mt-1">
                   {attendanceMetrics.thisMonthCount} Meals
@@ -2257,7 +2257,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Metric 4: Latest Payment */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+              <div className="p-3.5 rounded-2xl bg-orange-50/25 border border-orange-200/70">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">Latest Payment</span>
                 <div className="font-black text-slate-900 text-base mt-1">
                   {latestPayment ? `₹${latestPayment.amount}` : '—'}
@@ -2279,7 +2279,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('pass')}
-                className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-white border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-white border border-orange-200/80 hover:border-orange-300 hover:bg-orange-50 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
               >
                 <span>Digital Pass</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -2295,7 +2295,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               )}
               <button
                 onClick={() => setActiveTab('menu')}
-                className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 transition cursor-pointer"
+                className="py-2.5 px-3 rounded-xl bg-orange-50/50 hover:bg-orange-100/70 border border-orange-200/70 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 transition cursor-pointer"
               >
                 <Coffee className="w-3.5 h-3.5 text-orange-600" />
                 <span>Menu</span>
@@ -2329,7 +2329,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
           {/* Active Polls Preview (Feature 11 Preview in Dashboard) */}
           {polls.filter(p => p.status === 'active').length > 0 && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-2xs space-y-3">
+            <div className="bg-white rounded-3xl border border-orange-200/80 p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Vote className="w-4 h-4 text-orange-600" />
@@ -2363,7 +2363,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                             className={`w-full p-2.5 rounded-xl border text-left text-xs transition cursor-pointer relative overflow-hidden flex items-center justify-between ${
                               isStudentVote
                                 ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-950' 
-                                : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800'
+                                : 'border-orange-200/70 bg-orange-50/20 hover:bg-orange-50/50 text-slate-800'
                             }`}
                           >
                             <div 
@@ -2389,7 +2389,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
           {/* Announcements & Notices Board (Feature 14 Preview in Dashboard) */}
           {reminders.filter(r => r.isActive).length > 0 && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-2xs space-y-3">
+            <div className="bg-white rounded-3xl border border-orange-200/80 p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Bell className="w-4 h-4 text-orange-600" />
@@ -2406,7 +2406,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <div className="space-y-2">
                 {reminders.filter(r => r.isActive).slice(0, 2).map(r => (
                   <div key={r.id} className={`p-3 rounded-2xl border text-xs space-y-1 ${
-                    r.priority === 'urgent' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    r.priority === 'urgent' ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-orange-50/20 border-orange-200/70 text-slate-800'
                   }`}>
                     <div className="font-bold flex items-center gap-1.5">
                       <span>{r.title}</span>
@@ -2456,8 +2456,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {activeTab === 'attendance' && (
         <div className="w-full max-w-full sm:max-w-2xl space-y-4">
           {/* Header Card */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-100 pb-3">
               <div>
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <Utensils className="w-5 h-5 text-orange-600" />
@@ -2467,26 +2467,26 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   Authoritative attendance records verified at Morya Mess counter gate
                 </p>
               </div>
-              <span className="text-xs font-black bg-orange-100 text-orange-800 px-3 py-1 rounded-full self-start sm:self-auto">
+              <span className="text-xs font-black bg-orange-100 text-orange-800 px-3 py-1 rounded-full border border-orange-200 self-start sm:self-auto">
                 {attendanceMetrics.total} Total Meals
               </span>
             </div>
 
             {/* Summary Statistics Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Meals</span>
+              <div className="p-3 rounded-2xl bg-orange-50/25 border border-orange-200/70 text-center">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Meals</span>
                 <span className="text-base font-black text-slate-900">{attendanceMetrics.total}</span>
               </div>
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-100 text-center">
+              <div className="p-3 rounded-2xl bg-amber-50/60 border border-orange-200/70 text-center">
                 <span className="text-[10px] uppercase font-bold text-amber-800 block">Lunch</span>
                 <span className="text-base font-black text-amber-900">{attendanceMetrics.lunchCount}</span>
               </div>
-              <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-100 text-center">
+              <div className="p-3 rounded-2xl bg-indigo-50/60 border border-orange-200/70 text-center">
                 <span className="text-[10px] uppercase font-bold text-indigo-800 block">Dinner</span>
                 <span className="text-base font-black text-indigo-900">{attendanceMetrics.dinnerCount}</span>
               </div>
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-center">
+              <div className="p-3 rounded-2xl bg-emerald-50/60 border border-orange-200/70 text-center">
                 <span className="text-[10px] uppercase font-bold text-emerald-800 block">This Month</span>
                 <span className="text-base font-black text-emerald-900">{attendanceMetrics.thisMonthCount}</span>
               </div>
@@ -2497,7 +2497,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <button
                 onClick={() => setAttFilter('all')}
                 className={`px-3 py-1.5 rounded-xl cursor-pointer transition ${
-                  attFilter === 'all' ? 'bg-orange-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+                  attFilter === 'all' ? 'bg-orange-600 text-white shadow-xs' : 'bg-white border border-orange-200/70 hover:bg-orange-50/50 text-slate-700'
                 }`}
               >
                 All Meals ({attendanceMetrics.total})
@@ -2505,7 +2505,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <button
                 onClick={() => setAttFilter('this_month')}
                 className={`px-3 py-1.5 rounded-xl cursor-pointer transition ${
-                  attFilter === 'this_month' ? 'bg-orange-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+                  attFilter === 'this_month' ? 'bg-orange-600 text-white shadow-xs' : 'bg-white border border-orange-200/70 hover:bg-orange-50/50 text-slate-700'
                 }`}
               >
                 This Month ({attendanceMetrics.thisMonthCount})
@@ -2513,7 +2513,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <button
                 onClick={() => setAttFilter('prev_month')}
                 className={`px-3 py-1.5 rounded-xl cursor-pointer transition ${
-                  attFilter === 'prev_month' ? 'bg-orange-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+                  attFilter === 'prev_month' ? 'bg-orange-600 text-white shadow-xs' : 'bg-white border border-orange-200/70 hover:bg-orange-50/50 text-slate-700'
                 }`}
               >
                 Last Month ({attendanceMetrics.prevMonthCount})
@@ -2521,7 +2521,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <button
                 onClick={() => setAttFilter('lunch')}
                 className={`px-3 py-1.5 rounded-xl cursor-pointer transition ${
-                  attFilter === 'lunch' ? 'bg-orange-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+                  attFilter === 'lunch' ? 'bg-orange-600 text-white shadow-xs' : 'bg-white border border-orange-200/70 hover:bg-orange-50/50 text-slate-700'
                 }`}
               >
                 Lunch Only
@@ -2529,7 +2529,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <button
                 onClick={() => setAttFilter('dinner')}
                 className={`px-3 py-1.5 rounded-xl cursor-pointer transition ${
-                  attFilter === 'dinner' ? 'bg-orange-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+                  attFilter === 'dinner' ? 'bg-orange-600 text-white shadow-xs' : 'bg-white border border-orange-200/70 hover:bg-orange-50/50 text-slate-700'
                 }`}
               >
                 Dinner Only
@@ -2545,13 +2545,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
             {/* Attendance Record List */}
             {filteredAttendance.length === 0 ? (
-              <div className="p-10 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                <Utensils className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="p-10 text-center bg-orange-50/20 rounded-2xl border border-orange-200/70 space-y-2">
+                <Utensils className="w-8 h-8 text-orange-300 mx-auto" />
                 <div className="font-bold text-slate-700 text-sm">No attendance records found for this period.</div>
                 <p className="text-xs text-slate-400">Meals scanned at the counter will appear here immediately.</p>
               </div>
             ) : (
-              <div className="divide-y divide-slate-100 text-xs">
+              <div className="divide-y divide-orange-100/70 text-xs">
                 {filteredAttendance.map(log => {
                   const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                   const isAllow = log.scanStatus === 'ALLOW' || (log.scanStatus as string) === 'VERIFIED';
@@ -2588,7 +2588,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setSelectedDisputeLog(log)}
-                            className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-orange-700 hover:bg-orange-50 transition cursor-pointer border border-slate-200"
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-600 hover:text-orange-700 hover:bg-orange-50 transition cursor-pointer border border-orange-200/80 hover:border-orange-300"
                             title="Report incorrect meal, timing, or presence"
                           >
                             Report Issue
@@ -2637,7 +2637,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Pass Header */}
-              <div className="flex flex-col items-center pb-3 border-b-2 border-slate-200 mb-3 text-center">
+              <div className="flex flex-col items-center pb-3 border-b-2 border-orange-200 mb-3 text-center">
                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 tracking-wider mb-0.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>MORYA MESS MANAGEMENT</span>
@@ -2649,8 +2649,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   OFFICIAL STUDENT DIGITAL DINING PASS
                 </p>
 
-                <div className="flex items-center justify-between w-full mt-2 pt-2 border-t border-slate-100 text-[11px]">
-                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                <div className="flex items-center justify-between w-full mt-2 pt-2 border-t border-orange-100 text-[11px]">
+                  <span className="font-mono font-bold text-slate-800 bg-orange-50/70 px-2 py-0.5 rounded border border-orange-200/80">
                     PASS ID: {customer.id}
                   </span>
                   <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
@@ -2664,7 +2664,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Student Identity Block */}
-              <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 mb-3.5 space-y-2 text-xs">
+              <div className="bg-orange-50/20 rounded-2xl p-3.5 border border-orange-200/80 mb-3.5 space-y-2 text-xs">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                     Student Member Name
@@ -2711,7 +2711,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Shift Hours Guide */}
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center text-[11px] text-slate-700">
+              <div className="p-2.5 rounded-xl bg-orange-50/25 border border-orange-200/70 text-center text-[11px] text-slate-700">
                 <strong>Shift Hours:</strong> Lunch: 10:30 AM – 02:30 PM | Dinner: 08:30 PM – 10:30 PM
                 <div className="text-[10px] text-rose-700 font-bold mt-0.5">
                   Sunday Dinner Shift is Closed for Kitchen Maintenance
@@ -2719,7 +2719,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Security Seal & Authorized Stamp */}
-              <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
+              <div className="pt-3 mt-3 border-t border-orange-200/80 flex items-center justify-between text-[10px] text-slate-500">
                 <div>
                   <span className="font-bold text-slate-800 block">SECURITY CERTIFIED</span>
                   <span>Non-transferable digital pass</span>
@@ -2824,7 +2824,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         className={`rounded-2xl p-2.5 text-center flex flex-col items-center justify-center gap-1 transition-all duration-200 border ${
                           isUsed
                             ? 'bg-gradient-to-b from-orange-500 to-amber-500 text-white border-orange-300 shadow-2xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-orange-300 shadow-2xs'
+                            : 'bg-white text-slate-700 border-orange-200/70 hover:border-orange-300 shadow-2xs'
                         }`}
                       >
                         <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
@@ -2932,7 +2932,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                       min={today}
                       value={leaveStart}
                       onChange={e => setLeaveStart(e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-bold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
+                      className="w-full px-4 py-3 rounded-2xl border border-orange-200/80 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-bold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
                     />
                   </div>
                   <div>
@@ -2946,7 +2946,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                       min={leaveStart}
                       value={leaveEnd}
                       onChange={e => setLeaveEnd(e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-bold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
+                      className="w-full px-4 py-3 rounded-2xl border border-orange-200/80 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-bold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
                     />
                   </div>
                 </div>
@@ -2959,7 +2959,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   <select
                     value={leaveReason}
                     onChange={e => setLeaveReason(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-semibold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
+                    className="w-full px-4 py-3 rounded-2xl border border-orange-200/80 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 bg-white font-semibold text-slate-800 transition shadow-2xs hover:border-orange-300 cursor-pointer"
                   >
                     <option value="Going to Hometown / Family Function">Going to Hometown / Family Function</option>
                     <option value="College Semester Exam Break">College Semester Exam Break</option>
@@ -3004,7 +3004,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             )}
 
             {/* Leave History */}
-            <div className="pt-4 border-t border-slate-100 space-y-3.5">
+            <div className="pt-4 border-t border-orange-100 space-y-3.5">
               <div className="flex items-center justify-between">
                 <h3 className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <span>Your Leave History</span>
@@ -3018,7 +3018,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {leaveRequests.length === 0 ? (
-                <div className="py-7 text-center text-xs text-slate-500 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200 font-medium">
+                <div className="py-7 text-center text-xs text-slate-500 bg-orange-50/20 rounded-2xl border border-dashed border-orange-200/80 font-medium">
                   No leave applications recorded yet.
                 </div>
               ) : (
@@ -3026,7 +3026,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   {leaveRequests.map(l => (
                     <div 
                       key={l.id} 
-                      className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-orange-200 hover:shadow-xs flex items-center justify-between gap-3 transition-all"
+                      className="p-4 rounded-2xl bg-white border border-orange-200/80 hover:border-orange-300 hover:shadow-xs flex items-center justify-between gap-3 transition-all"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -3061,9 +3061,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {activeTab === 'payments' && (
         <div className="w-full max-w-full sm:max-w-2xl space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-5">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-5">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold">
                   <CreditCard className="w-5 h-5" />
@@ -3171,7 +3171,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
             {/* Payment Record / UTR Entry Form */}
             <form onSubmit={handleRecordStudentPayment} className="space-y-4 pt-2">
-              <div className="border-t border-slate-100 pt-3">
+              <div className="border-t border-orange-100 pt-3">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-slate-800 mb-1">
                   Record Your Payment for Owner Verification
                 </h3>
@@ -3192,7 +3192,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     value={payAmount}
                     onChange={e => setPayAmount(e.target.value)}
                     placeholder="e.g. 2500"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 font-bold text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white"
+                    className="w-full px-3 py-2.5 rounded-xl border border-orange-200/80 bg-orange-50/20 font-bold text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white"
                   />
                 </div>
 
@@ -3206,7 +3206,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     value={payUtr}
                     onChange={e => setPayUtr(e.target.value)}
                     placeholder="e.g. 425619382019"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white"
+                    className="w-full px-3 py-2.5 rounded-xl border border-orange-200/80 bg-orange-50/20 font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white"
                   />
                 </div>
               </div>
@@ -3220,7 +3220,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={payNotes}
                   onChange={e => setPayNotes(e.target.value)}
                   placeholder="e.g. Paid for next month / Google Pay"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-slate-50 text-xs text-slate-900 focus:outline-none focus:border-orange-600 focus:bg-white"
+                  className="w-full px-3 py-2 rounded-xl border border-orange-200/80 bg-orange-50/20 text-xs text-slate-900 focus:outline-none focus:border-orange-500 focus:bg-white"
                 />
               </div>
 
@@ -3241,7 +3241,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </form>
 
             {/* Payment Transactions & Receipts List */}
-            <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="border-t border-orange-100 pt-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
                   Payment History & Receipts ({payments.length})
@@ -3256,16 +3256,16 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   {payments.map(p => (
                     <div 
                       key={p.id}
-                      className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      className="p-3.5 rounded-2xl border border-orange-200/70 bg-orange-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                     >
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-black text-slate-900 text-sm">₹{p.amount}</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-slate-200 text-slate-700 font-mono">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-orange-100 text-orange-800 font-mono border border-orange-200/60">
                             {p.paymentMode}
                           </span>
                           {p.transactionReference && (
-                            <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                            <span className="text-[10px] font-mono text-slate-600 bg-white px-1.5 py-0.5 rounded border border-orange-200/60">
                               UTR: {p.transactionReference}
                             </span>
                           )}
@@ -3318,9 +3318,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {selectedReceipt && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-slate-200">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-orange-200">
             {/* Receipt Header */}
-            <div className="text-center border-b border-slate-200 pb-3">
+            <div className="text-center border-b border-orange-100 pb-3">
               <span className="text-[10px] uppercase font-bold text-orange-600 tracking-widest block">
                 Official Digital Receipt
               </span>
@@ -3329,30 +3329,30 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* Receipt Meta */}
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs space-y-2">
-              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+            <div className="bg-orange-50/20 rounded-2xl p-4 border border-orange-200/80 text-xs space-y-2">
+              <div className="flex justify-between border-b border-orange-100 pb-1.5">
                 <span className="text-slate-400 font-bold">Receipt ID:</span>
                 <span className="font-mono font-bold text-slate-800">{selectedReceipt.id}</span>
               </div>
-              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+              <div className="flex justify-between border-b border-orange-100 pb-1.5">
                 <span className="text-slate-400 font-bold">Student Name:</span>
                 <span className="font-bold text-slate-900">{customer.name}</span>
               </div>
-              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+              <div className="flex justify-between border-b border-orange-100 pb-1.5">
                 <span className="text-slate-400 font-bold">Customer ID:</span>
                 <span className="font-mono font-bold text-slate-800">{customer.id}</span>
               </div>
-              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+              <div className="flex justify-between border-b border-orange-100 pb-1.5">
                 <span className="text-slate-400 font-bold">Payment Mode:</span>
                 <span className="font-bold uppercase text-slate-800">{selectedReceipt.paymentMode}</span>
               </div>
               {selectedReceipt.transactionReference && (
-                <div className="flex justify-between border-b border-slate-200 pb-1.5">
+                <div className="flex justify-between border-b border-orange-100 pb-1.5">
                   <span className="text-slate-400 font-bold">UTR / Ref No:</span>
                   <span className="font-mono font-bold text-orange-700">{selectedReceipt.transactionReference}</span>
                 </div>
               )}
-              <div className="flex justify-between border-b border-slate-200 pb-1.5">
+              <div className="flex justify-between border-b border-orange-100 pb-1.5">
                 <span className="text-slate-400 font-bold">Date of Payment:</span>
                 <span className="font-mono text-slate-700">{new Date(selectedReceipt.createdAt).toLocaleDateString()}</span>
               </div>
@@ -3393,8 +3393,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {activeTab === 'statement' && (
         <div className="w-full max-w-full sm:max-w-2xl space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-100 pb-3">
               <div>
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <FileText className="w-5 h-5 text-orange-600" />
@@ -3412,14 +3412,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   type="month"
                   value={statementMonth}
                   onChange={e => setStatementMonth(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-slate-50"
+                  className="px-3 py-1.5 rounded-xl border border-orange-200/80 text-xs font-bold text-slate-800 bg-orange-50/20"
                 />
               </div>
             </div>
 
             {/* Statement Summary Card */}
-            <div className="bg-slate-50 rounded-2xl p-4 sm:p-5 border border-slate-200 space-y-3 text-xs">
-              <div className="flex justify-between border-b border-slate-200 pb-2">
+            <div className="bg-orange-50/25 rounded-2xl p-4 sm:p-5 border border-orange-200/80 space-y-3 text-xs">
+              <div className="flex justify-between border-b border-orange-100 pb-2">
                 <div>
                   <span className="text-slate-400 font-bold block text-[10px] uppercase">Diner Name</span>
                   <span className="font-extrabold text-slate-900 text-sm">{customer.name}</span>
@@ -3431,26 +3431,26 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                <div className="p-2.5 rounded-xl bg-white border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block">Monthly Plan Rate</span>
                   <span className="font-bold text-slate-900">₹{statementData.monthlyPlanRate}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                <div className="p-2.5 rounded-xl bg-white border border-orange-200/70">
                   <span className="text-[10px] text-emerald-600 font-bold block">Verified Paid</span>
                   <span className="font-bold text-emerald-700">₹{statementData.verifiedMonthPayments}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                <div className="p-2.5 rounded-xl bg-white border border-orange-200/70">
                   <span className="text-[10px] text-amber-600 font-bold block">Pending Paid</span>
                   <span className="font-bold text-amber-700">₹{statementData.pendingMonthPayments}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                <div className="p-2.5 rounded-xl bg-white border border-orange-200/70">
                   <span className="text-[10px] text-rose-600 font-bold block">Balance Due</span>
                   <span className="font-bold text-rose-700">₹{statementData.netBalance}</span>
                 </div>
               </div>
 
               {/* Attendance Breakdown in Statement */}
-              <div className="p-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-white border border-orange-200/70 flex items-center justify-between">
                 <div>
                   <span className="font-bold text-slate-800 block text-xs">Meals Eaten this Month:</span>
                   <span className="text-[11px] text-slate-500">
@@ -3463,7 +3463,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
 
               {/* Leave Breakdown in Statement */}
-              <div className="p-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-white border border-orange-200/70 flex items-center justify-between">
                 <div>
                   <span className="font-bold text-slate-800 block text-xs">Approved Leave Days:</span>
                   <span className="text-[11px] text-slate-500">
@@ -3492,8 +3492,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {activeTab === 'menu' && (
         <div className="w-full max-w-full sm:max-w-2xl space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-100 pb-3">
               <div>
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <Coffee className="w-5 h-5 text-orange-600" />
@@ -3503,7 +3503,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   Published and updated directly by Morya Mess Head Chef
                 </p>
               </div>
-              <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-orange-100 text-orange-800 uppercase self-start sm:self-auto">
+              <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-orange-100 text-orange-800 uppercase self-start sm:self-auto border border-orange-200/80">
                 Today: {String(currentDayOfWeek)}
               </span>
             </div>
@@ -3516,10 +3516,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   onClick={() => setMenuActiveDay(day)}
                   className={`px-3 py-2 rounded-xl transition cursor-pointer capitalize whitespace-nowrap text-xs ${
                     menuActiveDay === day 
-                      ? 'bg-orange-600 text-white shadow-xs' 
+                      ? 'bg-orange-600 text-white shadow-xs font-black' 
                       : day === currentDayOfWeek
                       ? 'bg-orange-100 text-orange-900 border border-orange-300 font-extrabold'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      : 'bg-orange-50/30 hover:bg-orange-100/60 border border-orange-200/60 text-slate-700'
                   }`}
                 >
                   {day} {day === currentDayOfWeek && '★'}
@@ -3631,13 +3631,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       {/* ========================================================================= */}
       {activeTab === 'profile' && (
         <div className="w-full max-w-full sm:max-w-2xl space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-5">
+          <div className="bg-white rounded-3xl border border-orange-200/80 p-5 sm:p-6 shadow-2xs space-y-5">
             {/* Profile Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex items-center justify-between border-b border-orange-100 pb-4">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setActiveTab('dashboard')}
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                  className="p-2 rounded-xl bg-orange-50 border border-orange-200/70 hover:bg-orange-100 text-slate-700 transition cursor-pointer"
                   title="Back to Dashboard"
                 >
                   <ArrowRight className="w-4 h-4 rotate-180" />
@@ -3683,26 +3683,26 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* Subscription & Validity Details */}
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5 text-xs">
-              <h4 className="font-black text-xs uppercase tracking-wider text-slate-800 border-b border-slate-200 pb-2">
+            <div className="bg-orange-50/20 rounded-2xl p-4 border border-orange-200/80 space-y-2.5 text-xs">
+              <h4 className="font-black text-xs uppercase tracking-wider text-slate-800 border-b border-orange-100 pb-2">
                 Subscription & Plan Details
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <div className="bg-white p-3 rounded-xl border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block uppercase">Plan Type</span>
                   <span className="font-bold text-slate-900 capitalize text-sm">
                     {customer.planType ? customer.planType.replace(/_/g, ' ') : 'Standard Monthly Plan'}
                   </span>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <div className="bg-white p-3 rounded-xl border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block uppercase">Monthly Fee Rate</span>
                   <span className="font-bold text-emerald-700 text-sm">₹{customer.totalAmount || standardFee} / 30 Days</span>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <div className="bg-white p-3 rounded-xl border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block uppercase">Start Date</span>
                   <span className="font-mono font-bold text-slate-900">{customer.startDate || 'N/A'}</span>
                 </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <div className="bg-white p-3 rounded-xl border border-orange-200/70">
                   <span className="text-[10px] text-slate-400 font-bold block uppercase">Expiry Date</span>
                   <span className="font-mono font-bold text-orange-700">{customer.endDate || 'N/A'}</span>
                 </div>
@@ -3710,8 +3710,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             {/* Student Contact & College Information (FEATURE 18: Permitted Profile Edits) */}
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <div className="bg-orange-50/20 rounded-2xl p-4 border border-orange-200/80 space-y-3 text-xs">
+              <div className="flex items-center justify-between border-b border-orange-100 pb-2">
                 <h4 className="font-black text-xs uppercase tracking-wider text-slate-800">
                   Contact & College Information
                 </h4>
@@ -3725,7 +3725,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                       setProfileSaveMsg(null);
                       setIsEditingProfile(true);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-orange-300 text-orange-700 font-bold text-[11px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-white border border-orange-200 hover:border-orange-300 text-orange-700 font-bold text-[11px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
                   >
                     <Edit3 className="w-3 h-3 text-orange-600" />
                     <span>Edit Contact Info</span>
