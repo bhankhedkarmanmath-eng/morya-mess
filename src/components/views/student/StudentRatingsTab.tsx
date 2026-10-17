@@ -33,8 +33,11 @@ export const StudentRatingsTab: React.FC<StudentRatingsTabProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // My ratings
-  const myRatings = ratings.filter(r => r.customerId === customer.id);
+  // My ratings (case-insensitive and phone fallback)
+  const myRatings = ratings.filter(r => 
+    r.customerId?.toLowerCase() === customer.id?.toLowerCase() || 
+    (customer.phone && r.customerId === customer.phone)
+  );
 
   // Check if student already submitted rating for the chosen date and shift
   const alreadyReviewed = myRatings.some(

@@ -218,23 +218,31 @@ export async function authenticateStudent(
     return { success: false, error: 'Please enter your password.' };
   }
 
+  // Match helper that handles phone number variations (+91, 0, spaces, dashes)
+  const digitsOnly = cleanId.replace(/\D/g, '');
+  const last10Digits = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+
+  const matchCustomer = (c: Customer) => {
+    if (!c) return false;
+    if (c.id && c.id.toLowerCase() === cleanId) return true;
+    const cPhone = c.phone || '';
+    if (cPhone.trim().toLowerCase() === cleanId) return true;
+    const cDigits = cPhone.replace(/\D/g, '');
+    if (cDigits && digitsOnly && cDigits === digitsOnly) return true;
+    const cLast10 = cDigits.length >= 10 ? cDigits.slice(-10) : cDigits;
+    if (last10Digits && cLast10 && last10Digits.length === 10 && last10Digits === cLast10) return true;
+    return false;
+  };
+
   // Look up student by phone or ID
-  let student = allCustomers.find(
-    c => c.id.toLowerCase() === cleanId || 
-         c.phone.replace(/\D/g, '') === cleanId.replace(/\D/g, '') ||
-         c.phone.trim() === cleanId
-  );
+  let student = allCustomers.find(matchCustomer);
 
   // If not found in current memory, pull fresh data from server
   if (!student) {
     try {
       await pullSyncFromServer();
       const freshCustomers = loadCustomers();
-      student = freshCustomers.find(
-        c => c.id.toLowerCase() === cleanId || 
-             c.phone.replace(/\D/g, '') === cleanId.replace(/\D/g, '') ||
-             c.phone.trim() === cleanId
-      );
+      student = freshCustomers.find(matchCustomer);
     } catch {
       // ignore
     }
@@ -431,6 +439,9 @@ export async function changeStudentPassword(
     updatedAt: new Date().toISOString()
   };
   saveStoredCredentials(credentials);
+
+  // Sync to server so all devices recognize the new permanent password
+  syncCredentialToServer(studentKey, credentials[studentKey]);
 
   // Sync to Supabase completeFirstTimePasswordReset if available
   try {

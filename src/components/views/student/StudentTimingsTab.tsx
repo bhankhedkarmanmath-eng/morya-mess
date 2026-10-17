@@ -122,11 +122,11 @@ export const StudentTimingsTab: React.FC<StudentTimingsTabProps> = ({ shiftAudit
           <div className="p-3.5 rounded-2xl bg-indigo-50/30 border border-indigo-100 space-y-1.5 text-xs">
             <div className="flex justify-between items-center">
               <span className="text-slate-500 font-medium">Serving Window:</span>
-              <strong className="text-slate-900 font-mono text-sm">08:30 PM – 10:30 PM</strong>
+              <strong className="text-slate-900 font-mono text-sm">07:30 PM – 10:30 PM</strong>
             </div>
             <div className="flex justify-between items-center text-slate-600">
               <span>Gate QR Active:</span>
-              <span className="font-mono font-bold text-orange-600">08:15 PM – 10:30 PM</span>
+              <span className="font-mono font-bold text-orange-600">07:15 PM – 10:30 PM</span>
             </div>
             <div className="flex justify-between items-center text-slate-600">
               <span>Sunday Dinner:</span>

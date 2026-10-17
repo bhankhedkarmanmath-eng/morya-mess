@@ -54,6 +54,7 @@ import {
   registerStudentNomination,
   recordStudentDailyTick
 } from '../lib/cleanPlateTaskStorage';
+import { changeStudentPassword } from '../lib/authService';
 import {
   StudentPollsTab,
   StudentRatingsTab,
@@ -221,6 +222,15 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     };
   }, [customer.phone]);
 
+  // In-app student toast state (avoids window.alert)
+  const [studentToast, setStudentToast] = useState<{ message: string; type?: 'success' | 'info' | 'error' } | null>(null);
+  const showStudentToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setStudentToast({ message, type });
+    setTimeout(() => {
+      setStudentToast(null);
+    }, 4500);
+  };
+
   const handleConfirmNomination = (e: React.FormEvent) => {
     e.preventDefault();
     const res = registerStudentNomination({
@@ -232,13 +242,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     });
     setCampaignParticipant(res.participant);
     setIsNominateModalOpen(false);
-    alert(res.message);
+    showStudentToast(res.message, res.success ? 'success' : 'info');
   };
 
   const handleStudentDailyTick = () => {
     const res = recordStudentDailyTick(customer.phone, customer.name, today);
     setCampaignParticipant(res.participant);
-    alert(res.message);
+    showStudentToast(res.message, res.success ? 'success' : 'info');
     setShowPostScanModal(false);
   };
 
@@ -249,6 +259,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const [editCollege, setEditCollege] = useState(customer.collegeOrWork || '');
   const [editHostel, setEditHostel] = useState(customer.hostelOrAddress || '');
   const [profileSaveMsg, setProfileSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Password Change State
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [passwordChangeStatus, setPasswordChangeStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   // Shift & Timing Info
   const [shiftAudit, setShiftAudit] = useState<MessShiftAudit>(() => evaluateStrictMessShift());
@@ -1062,6 +1080,38 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     }
   };
 
+  const handleStudentPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeStatus(null);
+    setIsSavingPassword(true);
+    const res = await changeStudentPassword(
+      customer.id,
+      currentPasswordInput,
+      newPasswordInput,
+      confirmPasswordInput
+    );
+    setIsSavingPassword(false);
+    if (res.success) {
+      setPasswordChangeStatus({
+        success: true,
+        message: 'Your permanent password has been updated successfully! Use this password for your next login.'
+      });
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      showStudentToast('Password updated successfully!', 'success');
+      setTimeout(() => {
+        setIsChangingPassword(false);
+        setPasswordChangeStatus(null);
+      }, 3000);
+    } else {
+      setPasswordChangeStatus({
+        success: false,
+        message: res.error || 'Failed to update password.'
+      });
+    }
+  };
+
   // =========================================================================
   // CAMERA STANDEE SCANNER LOGIC (LIVE CAMERA ONLY)
   // =========================================================================
@@ -1277,6 +1327,32 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-b from-orange-50/25 via-slate-50 to-orange-50/15 flex flex-col items-center p-2.5 sm:p-5 select-none font-sans">
+      {/* Floating In-App Student Toast */}
+      {studentToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[90%] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className={`p-3.5 rounded-2xl shadow-xl border flex items-center gap-2.5 backdrop-blur-md pointer-events-auto ${
+            studentToast.type === 'error'
+              ? 'bg-rose-900/95 text-white border-rose-700'
+              : studentToast.type === 'info'
+              ? 'bg-slate-900/95 text-white border-slate-700'
+              : 'bg-emerald-900/95 text-white border-emerald-700'
+          }`}>
+            <span className="text-base shrink-0">
+              {studentToast.type === 'error' ? '⚠️' : studentToast.type === 'info' ? 'ℹ️' : '✅'}
+            </span>
+            <span className="text-xs font-bold leading-snug flex-1">
+              {studentToast.message}
+            </span>
+            <button
+              onClick={() => setStudentToast(null)}
+              className="p-1 text-white/70 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP HEADER: LEFT = ☰ MENU, CENTER = MORYA MESS, RIGHT = PROFILE AVATAR */}
       <header className="w-full max-w-full sm:max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-orange-200/80 shadow-[0_4px_20px_rgba(234,88,12,0.06)] p-3 sm:p-4 mb-3 flex items-center justify-between sticky top-2 z-30">
         {/* LEFT: ☰ Hamburger Button */}
@@ -2712,7 +2788,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
               {/* Shift Hours Guide */}
               <div className="p-2.5 rounded-xl bg-orange-50/25 border border-orange-200/70 text-center text-[11px] text-slate-700">
-                <strong>Shift Hours:</strong> Lunch: 10:30 AM – 02:30 PM | Dinner: 08:30 PM – 10:30 PM
+                <strong>Shift Hours:</strong> Lunch: 10:30 AM – 02:30 PM | Dinner: 07:30 PM – 10:00 PM
                 <div className="text-[10px] text-rose-700 font-bold mt-0.5">
                   Sunday Dinner Shift is Closed for Kitchen Maintenance
                 </div>
@@ -3853,6 +3929,135 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               )}
             </div>
 
+            {/* Security & Password Card */}
+            <div className="bg-orange-50/20 rounded-2xl p-4 border border-orange-200/80 space-y-3 text-xs">
+              <div className="flex items-center justify-between border-b border-orange-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-orange-600" />
+                  <h4 className="font-black text-xs uppercase tracking-wider text-slate-800">
+                    Security & Pass Password
+                  </h4>
+                </div>
+                {!isChangingPassword ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsChangingPassword(true);
+                      setPasswordChangeStatus(null);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-orange-200 hover:border-orange-300 text-orange-700 font-bold text-[11px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                  >
+                    <Lock className="w-3 h-3 text-orange-600" />
+                    <span>Change Password</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsChangingPassword(false)}
+                    className="text-[11px] text-slate-500 font-bold hover:underline cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {passwordChangeStatus && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  passwordChangeStatus.success
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-900 border border-rose-200'
+                }`}>
+                  {passwordChangeStatus.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span className="font-medium">{passwordChangeStatus.message}</span>
+                </div>
+              )}
+
+              {isChangingPassword ? (
+                <form onSubmit={handleStudentPasswordSubmit} className="space-y-3 pt-1">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Current Password (or initial 112233):
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={currentPasswordInput}
+                      onChange={e => setCurrentPasswordInput(e.target.value)}
+                      placeholder="Enter current password"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 bg-white focus:outline-hidden focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        New Password:
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        value={newPasswordInput}
+                        onChange={e => setNewPasswordInput(e.target.value)}
+                        placeholder="Min 6 characters"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 bg-white focus:outline-hidden focus:border-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Confirm New Password:
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        value={confirmPasswordInput}
+                        onChange={e => setConfirmPasswordInput(e.target.value)}
+                        placeholder="Re-type new password"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 bg-white focus:outline-hidden focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="submit"
+                      disabled={isSavingPassword}
+                      className="flex-1 py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      {isSavingPassword ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Updating Password...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Update Password</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsChangingPassword(false)}
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex items-center justify-between text-slate-600 pt-1">
+                  <span>Pass Password status: <strong className="text-emerald-700">Protected & Active</strong></span>
+                  <span className="text-[11px] text-slate-400">SHA-256 Encrypted</span>
+                </div>
+              )}
+            </div>
+
             {/* Read-Only Protected Fields Notice */}
             <div className="p-3.5 rounded-2xl bg-slate-100 border border-slate-200 text-slate-600 text-[11px] flex items-start gap-2.5">
               <Lock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
@@ -4184,7 +4389,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           )}
 
           {/* Live Camera Viewport */}
-          {!isVerifying && !scanResult && (
+          {!isVerifying && !scanResult && !cameraError && (
             <div className="space-y-4">
               <div className="relative w-full aspect-square max-w-sm mx-auto bg-black rounded-3xl overflow-hidden border-4 border-orange-400/80 shadow-xl flex items-center justify-center ring-4 ring-orange-100">
                 <video
@@ -4211,29 +4416,31 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   </span>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Manual Code Fallback (For Damaged Lens) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 text-xs">
-                <span className="font-bold text-slate-700 block">Manual Token Code Entry (Fallback):</span>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualCode}
-                    onChange={e => setManualCode(e.target.value)}
-                    placeholder="Enter Standee Token"
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs uppercase"
-                  />
-                  <button
-                    onClick={() => {
-                      if (manualCode.trim()) {
-                        handleProcessScannedCode(manualCode.trim());
-                      }
-                    }}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl cursor-pointer"
-                  >
-                    Submit
-                  </button>
-                </div>
+          {/* Manual Code Fallback (Always accessible for damaged lens or camera permission issue) */}
+          {!isVerifying && !scanResult && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2 text-xs">
+              <span className="font-bold text-slate-700 block">Manual Token Code Entry (Fallback):</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualCode}
+                  onChange={e => setManualCode(e.target.value)}
+                  placeholder="Enter Standee Token"
+                  className="flex-1 px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs uppercase"
+                />
+                <button
+                  onClick={() => {
+                    if (manualCode.trim()) {
+                      handleProcessScannedCode(manualCode.trim());
+                    }
+                  }}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Submit
+                </button>
               </div>
             </div>
           )}

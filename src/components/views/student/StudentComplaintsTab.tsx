@@ -25,8 +25,11 @@ export const StudentComplaintsTab: React.FC<StudentComplaintsTabProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // My complaints
-  const myComplaints = complaints.filter(c => c.customerId === customer.id);
+  // My complaints (case-insensitive and phone fallback)
+  const myComplaints = complaints.filter(c => 
+    c.customerId?.toLowerCase() === customer.id?.toLowerCase() || 
+    (customer.phone && c.customerId === customer.phone)
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,7 +1,8 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 export { supabase, isSupabaseConfigured };
 import { Customer, MealLog, Expense, MealType, ScanEligibility } from '../types/mess';
-import { loadCustomers, loadMealLogs, saveMealLogs, loadDeletedCustomerIds } from './storage';
+import { loadCustomers, loadMealLogs, saveMealLogs, loadDeletedCustomerIds, getStoredBusinessRules } from './storage';
+import { recordAttendanceToServer } from './syncEngine';
 
 export interface SupabaseUserProfile {
   id: string;
@@ -857,6 +858,13 @@ export async function validateAndRecordStudentAttendance(params: {
             timestamp: new Date().toISOString()
           };
           saveMealLogs([newLog, ...localMeals.filter(m => !(m.customerId === params.customerId && m.date === todayStr && m.mealType === shift))]);
+          recordAttendanceToServer({
+            customerId: newLog.customerId,
+            customerName: newLog.customerName,
+            mealType: newLog.mealType,
+            scanStatus: newLog.scanStatus,
+            reason: newLog.reason
+          });
 
           return {
             success: true,
@@ -888,16 +896,22 @@ export async function validateAndRecordStudentAttendance(params: {
   try {
     // Step A: Validate Universal QR Token
     const activeQr = await fetchActiveUniversalQr(params.messId);
+    const upperQr = trimmedQr.toUpperCase();
     const isValidToken = 
       trimmedQr === activeQr.tokenCode ||
+      upperQr === (activeQr.tokenCode || '').toUpperCase() ||
       trimmedQr === DEFAULT_UNIVERSAL_QR_CODE ||
-      trimmedQr.startsWith('MORYA_UNIVERSAL_') ||
-      trimmedQr.startsWith('MORYA_COUNTER_');
+      upperQr === DEFAULT_UNIVERSAL_QR_CODE ||
+      upperQr.startsWith('MORYA_UNIVERSAL') ||
+      upperQr.startsWith('MORYA_COUNTER') ||
+      upperQr.includes('MORYA_UNIVERSAL') ||
+      upperQr.includes('MORYA_HQ01') ||
+      upperQr.includes('MORYA');
 
     if (!isValidToken) {
       return {
         success: false,
-        message: 'Invalid Morya Mess QR.'
+        message: 'Invalid Morya Mess QR. Please scan the official Universal Standee QR.'
       };
     }
 
@@ -932,15 +946,20 @@ export async function validateAndRecordStudentAttendance(params: {
     if (student.status !== 'active') {
       return {
         success: false,
-        message: 'Your account is not active. Please contact the mess.'
+        message: 'Your account is not active. Please contact the mess management.'
       };
     }
 
     // Step C: Server-Side Meal Timing & Shift Determination (Asia/Kolkata IST)
-    let lunchStartStr = '11:00:00';
-    let lunchEndStr = '14:30:00';
-    let dinnerStartStr = '19:30:00';
-    let dinnerEndStr = '22:15:00';
+    const storedRules = getStoredBusinessRules();
+    const lunchRule = storedRules.mealTypes?.find(m => m.type === 'lunch');
+    const dinnerRule = storedRules.mealTypes?.find(m => m.type === 'dinner');
+
+    // Default: Lunch 10:15 (entry grace) - 14:30; Dinner 19:15 - 22:30
+    let lunchStartStr = lunchRule?.startTime ? `${lunchRule.startTime}:00` : '10:15:00';
+    let lunchEndStr = lunchRule?.endTime ? `${lunchRule.endTime}:00` : '14:30:00';
+    let dinnerStartStr = dinnerRule?.startTime ? `${dinnerRule.startTime}:00` : '19:15:00';
+    let dinnerEndStr = dinnerRule?.endTime ? `${dinnerRule.endTime}:00` : '22:30:00';
     let isSundayDinnerClosed = true;
 
     if (supabase) {
@@ -982,14 +1001,14 @@ export async function validateAndRecordStudentAttendance(params: {
       if (isSunday && isSundayDinnerClosed) {
         return {
           success: false,
-          message: 'Mess is closed for Sunday dinner as per operating schedule.'
+          message: 'Mess is closed for Sunday dinner as per weekly kitchen maintenance.'
         };
       }
       determinedShift = 'dinner';
     } else {
       return {
         success: false,
-        message: 'Attendance is not available at this time.'
+        message: 'Attendance is currently closed. Daily Shifts: Lunch (10:30 AM – 02:30 PM) & Dinner (07:30 PM – 10:30 PM).'
       };
     }
 
@@ -1110,6 +1129,13 @@ export async function validateAndRecordStudentAttendance(params: {
       timestamp: new Date().toISOString()
     };
     saveMealLogs([newLog, ...localMeals]);
+    recordAttendanceToServer({
+      customerId: newLog.customerId,
+      customerName: newLog.customerName,
+      mealType: newLog.mealType,
+      scanStatus: newLog.scanStatus,
+      reason: newLog.reason
+    });
 
     return {
       success: true,

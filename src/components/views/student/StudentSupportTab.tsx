@@ -2,6 +2,8 @@ import React from 'react';
 import { Customer } from '../../../types/mess';
 import { HelpCircle, Phone, MessageSquare, MapPin, Clock, ExternalLink, ShieldCheck, Mail, AlertTriangle } from 'lucide-react';
 
+import { getStoredBusinessRules } from '../../../lib/storage';
+
 interface StudentSupportTabProps {
   customer: Customer;
   onNavigateToComplaints: () => void;
@@ -13,11 +15,12 @@ export const StudentSupportTab: React.FC<StudentSupportTabProps> = ({
   onNavigateToComplaints,
   messName = 'Morya Mess'
 }) => {
-  const messPhone = '+91 98223 34455';
-  const messCleanPhone = '919822334455';
-  const messAddress = 'Near COEP Main Gate, Shivaji Nagar, Pune, Maharashtra 411005';
-  const whatsappUrl = `https://wa.me/${messCleanPhone}?text=${encodeURIComponent(
-    `Hello Morya Mess Management, I am ${customer.name} (Student ID: ${customer.id}). I need help regarding my mess subscription.`
+  const rules = getStoredBusinessRules();
+  const messPhone = rules.contactPhone || '+91 74475 27804';
+  const messCleanPhone = messPhone.replace(/\D/g, '') || '917447527804';
+  const messAddress = rules.address || 'Near Girls Hostel Complex, College Road';
+  const whatsappUrl = `https://wa.me/${messCleanPhone.startsWith('91') ? messCleanPhone : `91${messCleanPhone}`}?text=${encodeURIComponent(
+    `Hello ${rules.messName || 'Morya Mess'} Management, I am ${customer.name} (Student ID: ${customer.id}). I need help regarding my mess subscription.`
   )}`;
 
   return (

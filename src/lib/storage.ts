@@ -72,7 +72,7 @@ export const DEFAULT_BUSINESS_RULES: BusinessRulesConfig = {
   messSubtitle: 'Digital Operations & Tiffin Service Management',
   ganpatiImage: '',
   ownerName: 'Bhai & Management',
-  contactPhone: '+91 98765 43210',
+  contactPhone: '+91 74475 27804',
   address: 'Near Girls Hostel Complex, College Road',
   currency: '₹',
   upiId: 'moryamess@upi',
